@@ -49,17 +49,17 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=lo
 # ==========================================
 OWNER_ID = 7693106830
 MONGO_URI = "mongodb+srv://khantphyoemin537_db_user:9VRKiaeZkz7rJdpz@cluster0.w6tgi8j.mongodb.net/?appName=Cluster0&tlsAllowInvalidCertificates=true"
-APP_ID = 30765844
-APP_HASH = '241b0bc6f03767302dc75763508f7b75'
+APP_ID = 35766004
+APP_HASH = 'd15b4226b81724722279bae6af69e22d'
 # [Bot 1] Main Sovereign Bot
 MAIN_BOT_TOKEN = "8338525059:AAEMDI6gBX0hzcCozymzVV7EmgDeh_73jeA"
 
 # [Bots 2-5] Guard / Shooter Squad
 SQUAD_TOKENS = [
-    "7857238353:AAEkDQnXqxyvXOQufwJwzZ7tXlwrmzM6XyI",
-    "8565944163:AAE5tew3A1a6GkOw69vMPYSgV2obyO-wPz4",
-    "8704927120:AAFUIrQhFaly9yRkEhsD4Yu5FiIEfj1F7Oo",
-    "7716597590:AAF4uR9g-cOBLssQcPfqe2ROIxnr3dd-PDQ"
+    "8498307038:AAHlikDQK1kN49_XEpogM_uAzUYmV3D6RyU",
+    "8449026098:AAH2GZB8NGsHWirxPc-Kpz-8wVsx-zEhjzk",
+    "8547705095:AAG4BJZb04jAjT_yNeOA4N_A_fM-iWon05A",
+    "8666805453:AAFChDLiNU0p4YmA7apAkpT-PQi0OcuE2LQ"
 ]
 
 SPECIFIC_GROUP = -1003940667453 # Log group / Target Image Group
