@@ -643,7 +643,7 @@ async def custom_filter_watcher(event):
 # 🔫 SECTION 2: GUARD SQUAD COMMANDS & HANDLERS (squad_master) [Files 19 & 20]
 # ====================================================================================
 
-SPECIFIC_CONTROL_GROUP = -1003580630981
+SPECIFIC_CONTROL_GROUP =  -1003940667453
 
 # [1. Learning Settings - Specific Group Only]
 
@@ -752,9 +752,10 @@ async def stop_actions(event):
     await event.reply("ငါတို့ 4 ယောက် ဒီခွေးမသားကို အ​သေသတ်ပေးထားတယ်။ပြန်ရှင်သန်ခွင့် မပေးဘူး")
 
 
-# [3. Squad General Watcher (Defense, Protect, Auto-Talk, Learn)]
-@squad_master.on(events.NewMessage())
-async def squad_watchers(event):
+# [3. Main Bot Watcher (Defense, Auto-Talk, Learn)]
+# Squad တွေနေရာမှာ bot1 တစ်ကောင်တည်းကပဲ စောင့်ကြည့်တော့မှာပါ
+@bot1.on(events.NewMessage())
+async def main_watcher(event):
     if event.is_private or not event.text: return
     if event.sender_id in bot_ids: return
 
@@ -762,24 +763,50 @@ async def squad_watchers(event):
     text = event.text.strip()
     reply = await event.get_reply_message()
 
-    # (A) Ultimate Owner Protection
+    # (A) Ultimate Owner Protection (Bot 1 ကပဲ ကာကွယ်မယ်)
+    # -------------------------------------------------------
     protection_cmds = ["ချိန်ထား", "ပစ်သတ်"]
     if any(text.startswith(c) for c in protection_cmds):
+        # Owner ကို လာထိရင် ပြန်ပစ်မယ်
         if reply and reply.sender_id == OWNER_ID and event.sender_id != OWNER_ID:
             words = [w.get("text") for w in filters_col.find() if w.get("text")]
             if not words: words = ["Chief ကို လာမစမ်းနဲ့!"]
+            
             mention = f"<a href='tg://user?id={event.sender_id}'>{escape_html((await event.get_sender()).first_name)}</a>"
-            for bot in squad_bots:
-                try: await bot.send_message(chat_id, f"{mention} {random.choice(words)}", parse_mode='html'); await asyncio.sleep(0.2)
-                except: pass
+            # Bot 1 ကပဲ စာပြန်ပို့မယ်
+            await bot1.send_message(chat_id, f"{mention} {random.choice(words)}", parse_mode='html')
             return
+
+        # ခွင့်ပြုချက်မရှိဘဲ အမိန့်ပေးရင် ပြန်ဆဲမယ်
         if not is_allowed(event.sender_id):
             name = escape_html((await event.get_sender()).first_name)
-            warning = f"ဟေ့ရောင် {name}... မင်းက ဘာကောင်မို့လို့ ငါတို့စီမှာ အမိန့်လာပေးနေတာလဲ? မင်းကိုပါ ငါတို့ ၄ ယောက် ပစ်သတ်ဖို့ အသင့်ချိန်ထားလိုက်ပြီ။"
-            for bot in squad_bots:
-                try: await bot.send_message(chat_id, warning, reply_to=event.id)
-                except: pass
+            warning = f"ဟေ့ရောင် {name}... မင်းက ဘာကောင်မို့လို့ ငါ့စီမှာ အမိန့်လာပေးနေတာလဲ? မင်းကိုပါ ငါ ပစ်သတ်ဖို့ အသင့်ချိန်ထားလိုက်ပြီ။"
+            await bot1.send_message(chat_id, warning, reply_to=event.id)
             return
+
+    # (E) Random Talking System (Bot 1 ကပဲ စကားဝင်ပြောမယ်)
+    # -------------------------------------------------------
+    if talking_status.get(chat_id) is True and not text.startswith(('/', '.', 'မှတ်')):
+        
+        if chat_id not in message_counts:
+            message_counts[chat_id] = 0
+        
+        message_counts[chat_id] += 1
+        
+        # စာ ၈ စောင်ပြည့်တိုင်း စကားပြောမယ် (ကိုကို ပြောင်းချင်ရင် ၈ နေရာမှာ ပြင်ပါ)
+        if message_counts[chat_id] >= 8: 
+            message_counts[chat_id] = 0
+            
+            # DB ထဲက ကျပန်း စကားလုံး တစ်ခု ယူမယ်
+            random_talk = list(talk_col.aggregate([{ "$sample": { "size": 1 } }]))
+            
+            if random_talk:
+                try:
+                    # Squad မဟုတ်တော့ဘဲ bot1 ကပဲ တိုက်ရိုက်ပြောမှာပါ
+                    await bot1.send_message(chat_id, random_talk[0]['text'])
+                except Exception as e:
+                    print(f"Bot 1 Talk Error: {e}")
+
 
     # --- New Message Handler အတွင်းမှာ ဒီအတိုင်း အစဉ်လိုက်ထားပါ ---
 
@@ -829,30 +856,6 @@ async def handle_everything(event):
                 "nickname": talker.get("nickname", "Anonymous"),
                 "chat_id": chat_id # ဘယ် group က စကားလုံးလဲဆိုတာပါ သိမ်းထားရင် ပိုကောင်းတယ်
             })
-
-    # -------------------------------------------------------
-    # (E) Random Talking System (ကျပန်း စကားပြောခြင်း)
-    # -------------------------------------------------------
-    if talking_status.get(chat_id) is True and not text.startswith(('/', '.', 'မှတ်')):
-        
-        if chat_id not in message_counts:
-            message_counts[chat_id] = 0
-        
-        message_counts[chat_id] += 1
-        
-        # စာ ၂ စောင်ပြည့်တိုင်း (ကိုကို ပြောင်းချင်ရင် ၂ နေရာမှာ ၅ လို့ ပြန်ပြင်ပါ)
-        if message_counts[chat_id] >= 8: 
-            message_counts[chat_id] = 0
-            
-            # DB ထဲက ကျပန်း စကားလုံး တစ်ခု ယူမယ်
-            random_talk = list(talk_col.aggregate([{ "$sample": { "size": 1 } }]))
-            
-            if random_talk:
-                try:
-                    target_bot = random.choice(squad_bots)
-                    await target_bot.send_message(chat_id, random_talk[0]['text'])
-                except Exception as e:
-                    print(f"Squad Talk Error: {e}")
 
 # ==========================================
 # 🚀 START SYSTEM
