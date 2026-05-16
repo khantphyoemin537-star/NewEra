@@ -996,7 +996,10 @@ async def dark_passenger_watcher(event):
                     f"မင်းရဲ့ အသံတွေကို ကမ္ဘာမြေကြီးက ဝါးမြိုသွားပြီ {mention}။ Silence is your only option. - crd to Morgan",
                     f"မင်း တည်ရှိမှုကိုပါ Delete လုပ်ပစ်ရမလား {mention}? သတိထား။ This is your final warning. - crd to Morgan"
                 ]
-
+            await event.respond(bq(random.choice(fake_words)), parse_mode='html')
+                
+            except Exception as e: # 👈 ဤ block ပျောက်နေ၍ SyntaxError ပြနေခြင်းဖြစ်သည်
+                print(f"Dark Passenger Protocol Error: {e}")
 # [3. Main Bot Watcher (Defense, Auto-Talk, Learn)]
 @bot1.on(events.NewMessage())
 async def main_watcher(event):
