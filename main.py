@@ -891,7 +891,7 @@ async def dark_passenger_watcher(event):
                     f"မင်း opinion တွေက loud တော့ loud တယ်… but intellectually bankrupt, gang. - crd to Morgan",
                     f"Relax {mention}, this ain’t your movie scene. Main character syndrome kinda crazy ngl. - crd to Morgan",
                     f"မင်း rage typing လုပ်လေလေ, chat က entertainment ပိုရလေပဲ 😭 - crd to Morgan",
-                    f"{mention really thought he cooked with that message… whole thing came out raw. - crd to Morgan",
+                    f"{mention} really thought he cooked with that message… whole thing came out raw. - crd to Morgan",
                     f"No offense gang, but your arguments got the structural integrity of wet tissue paper. - crd to Morgan",
                     f"မင်း confidence က admirable တော့ admirable ပဲ… especially facts zero ဖြစ်နေတာကို ignore လုပ်နိုင်တာ 😮‍💨 - crd to Morgan",
                     f"{mention}, you’re not intimidating bro. You just typing with unnecessary bass boost. - crd to Morgan",
