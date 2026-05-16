@@ -10,6 +10,8 @@ import pytz
 from flask import Flask
 # 🛠️ pymongo အစား motor ကို ပြောင်းသုံးထားပါတယ်
 from motor.motor_asyncio import AsyncIOMotorClient
+from telethon.tl.types import User
+from html import escape as escape_html
 from telethon import TelegramClient, events, types, Button 
 from telethon.tl.functions.channels import GetParticipantRequest
 from telethon.tl.types import (
@@ -631,24 +633,29 @@ async def custom_filter_watcher(event):
 
 @bot1.on(events.NewMessage(pattern=r'^ဗုံး(?:\s+(.*))?'))
 async def bomb_attack(event):
-    # ၁။ Allowlist စစ်ဆေးခြင်း 
-    # (Chief ရဲ့ Database ထဲက Allowlist Collection နာမည်အတိုင်း ပြင်သုံးပေးပါ - ဥပမာ allow_col)
+    # ၁။ Allowlist စစ်ဆေးခြင်း (Chief ရဲ့ db["allowed_users"] နဲ့ ချိတ်ဆက်မှု အပိုင်း)
     is_allowed = False
+    
+    # Owner ID ဖြစ်နေရင် တန်းပြီး True ပေးမယ်
     if event.sender_id == OWNER_ID:
         is_allowed = True
     else:
-        # allow_col နေရာမှာ Chief သုံးနေတဲ့ Allowlist DB Collection ကို အစားထိုးပါ
-        check_user = await allow_col.find_one({"user_id": event.sender_id})
-        if check_user:
-            is_allowed = True
-            
+        try:
+            # Chief ရဲ့ ပုံထဲကအတိုင်း allow_col ဆိုတဲ့ နာမည်နဲ့ Motor (Async) စစ်ထုတ်မယ်
+            check_user = await allow_col.find_one({"user_id": event.sender_id})
+            if check_user:
+                is_allowed = True
+        except Exception as db_err:
+            print(f"Allowlist DB Error: {db_err}")
+
+    # ခွင့်ပြုချက်မရှိရင် လျစ်လျူရှုမယ်
     if not is_allowed:
-        return  # Allowlist ထဲမပါရင် ဘာမှမလုပ်ဘဲ လျစ်လျူရှုမယ်
+        return  
 
     text = event.pattern_match.group(1)
     target_user = None
 
-    # ၂။ Target User ကို ရှာခြင်း (Reply (သို့) Mention)
+    # ၂။ Target User ကို ရှာခြင်း (Reply သို့မဟုတ် Mention)
     if event.is_reply:
         reply_msg = await event.get_reply_message()
         target_user = await bot1.get_entity(reply_msg.sender_id)
@@ -660,12 +667,15 @@ async def bomb_attack(event):
     else:
         return await event.reply(bq("Reply ထောက်ပါ (သို့) <code>ဗုံး @username</code> လို့ ရိုက်ပါ။"), parse_mode='html')
 
-    # User အစစ်မဟုတ်ဘဲ Channel တွေ၊ Bot တွေကို မန်းရှင်းခေါ်တာ တားဆီးမယ်
+    # User အစစ်မဟုတ်ရင် တားဆီးမယ်
     if not isinstance(target_user, User):
-        return await event.reply(bq("User အစစ်ကိုပဲ အာရုံနောက်အောင် လုပ်လို့ရပါမယ်။"), parse_mode='html')
+        return await event.reply(bq("User အစစ်ကိုပဲ တိုက်ခိုက်လို့ရပါမယ်။"), parse_mode='html')
+
+    # Target Name က None ဖြစ်နေရင် Fallback နာမည်ပေးမယ်
+    target_name = target_user.first_name or "Target"
 
     # ၃။ မန်းရှင်း ၁၅ ကြိမ်စာ ဖန်တီးခြင်း
-    mention_html = f"<a href='tg://user?id={target_user.id}'>💥{escape_html(target_user.first_name)}💥</a> "
+    mention_html = f"<a href='tg://user?id={target_user.id}'>💥{escape_html(target_name)}💥</a> "
     bomb_text = mention_html * 15
 
     # Command ရိုက်တဲ့ မက်ဆေ့ခ်ျကို အရင်ဖျက်မယ်
@@ -674,7 +684,7 @@ async def bomb_attack(event):
     except:
         pass
 
-    # ၄။ ဗုံးကျဲခြင်း (Default အနေနဲ့ အကြိမ် ၂၀ ထားပေးထားပါတယ်။ စိတ်ကြိုက် ပြင်နိုင်ပါတယ်)
+    # ၄။ ဗုံးကျဲခြင်း အပိုင်း (၄ စောင်ပြည့်တိုင်း အလိုအလျောက် ပြန်ရှင်းလင်းမယ်)
     total_bombs = 20
     sent_messages = []
 
@@ -685,19 +695,22 @@ async def bomb_attack(event):
 
             # မက်ဆေ့ခ်ျ ၄ စောင်ပြည့်တိုင်း ပြန်ဖျက်မယ်
             if len(sent_messages) == 4:
-                await asyncio.sleep(1) # ဖျက်တာ အရမ်းမမြန်အောင် စောင့်မယ်
+                await asyncio.sleep(0.5) 
                 await bot1.delete_messages(event.chat_id, sent_messages)
                 sent_messages.clear()
             
-            await asyncio.sleep(0.5) # Telegram FloodWait မမိအောင် စောင့်မယ်
+            await asyncio.sleep(0.8)  # FloodWait ကာကွယ်ရန်
         except Exception as e:
-            print(f"Bomb Error: {e}")
+            print(f"Bomb Sending Error: {e}")
             break
 
-    # ၅။ နောက်ဆုံး ပို့ထားတဲ့အထဲမှာ ၄ စောင် မပြည့်ဘဲ ကျန်နေခဲ့ရင် အကုန်ရှင်းလင်းမယ်
+    # ၅။ ကျန်နေတဲ့ မက်ဆေ့ခ်ျတွေကို နောက်ဆုံးအဆင့်အနေနဲ့ သိမ်းကျုံးရှင်းလင်းမယ်
     if sent_messages:
-        await asyncio.sleep(1)
-        await bot1.delete_messages(event.chat_id, sent_messages)
+        await asyncio.sleep(0.5)
+        try:
+            await bot1.delete_messages(event.chat_id, sent_messages)
+        except:
+            pass
 # ====================================================================================
 # 🔫 SECTION 2: GUARD SQUAD COMMANDS & HANDLERS (squad_master)
 # ====================================================================================
