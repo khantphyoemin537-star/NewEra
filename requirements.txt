@@ -8,3 +8,4 @@ dnspython
 pytz
 groq
 openai
+motor 
