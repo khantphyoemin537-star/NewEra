@@ -99,11 +99,12 @@ bot_names = []
 sticker_spam_data = {}
 bot_bully_tasks = {}      
 shoot_tasks = {}          
-tracking_targets = {}     
+tracking_targets = {} 
+dark_passenger_targets = {}
 learning_status = {}      
 talking_status = {}       
 message_counts = {}       
-
+GLOBAL_TALK = False 
 # ==========================================
 # 🛠️ HELPERS (ASYNC REFRACTORED)
 # ==========================================
@@ -685,7 +686,7 @@ async def bomb_attack(event):
         pass
 
     # ၄။ ဗုံးကျဲခြင်း အပိုင်း (၄ စောင်ပြည့်တိုင်း အလိုအလျောက် ပြန်ရှင်းလင်းမယ်)
-    total_bombs = 20
+    total_bombs = 12
     sent_messages = []
 
     for i in range(total_bombs):
@@ -711,6 +712,52 @@ async def bomb_attack(event):
             await bot1.delete_messages(event.chat_id, sent_messages)
         except:
             pass
+# ၁။ စနစ်စတင်မည့် Command
+@bot1.on(events.NewMessage(pattern=r'^/shadow(?:@\w+)?$'))
+async def set_shadow_ban(event):
+    if not await is_allowed(event.sender_id): return
+    reply = await event.get_reply_message()
+    if not reply or reply.sender_id == OWNER_ID: 
+        return await event.respond(bq("Target ကို Reply ထောက်ပြီး /shadow ပေးပါ Chief။"))
+    dark_passenger_targets[event.chat_id] = reply.sender_id
+    target_user = await reply.get_sender()
+    target_name = target_user.first_name or "Target"
+    try: await event.delete()
+    except: pass
+    await event.respond(bq(f"👤 {escape_html(target_name)} ရဲ့ နောက်ကွယ်မှာ Dark Passenger ကပ်လိုက်ပါပြီ။"))
+
+# ၂။ စနစ်ပိတ်မည့် Command
+@bot1.on(events.NewMessage(pattern=r'^/unshadow(?:@\w+)?$'))
+async def remove_shadow_ban(event):
+    if not await is_allowed(event.sender_id): return
+    try: await event.delete()
+    except: pass
+    if event.chat_id in dark_passenger_targets:
+        del dark_passenger_targets[event.chat_id]
+        await event.respond(bq("Dark Passenger ပြန်လည်ထွက်ခွာသွားပါပြီ။"))
+
+# ၃။ စာသားကို ကြားဖြတ်ဖျက်ပြီး အစားထိုးမည့် Watcher Core (ဒါကို Command တွေရဲ့ အောက်ဆုံးမှာထားပါ)
+@bot1.on(events.NewMessage())
+async def dark_passenger_watcher(event):
+    chat_id = event.chat_id
+    sender_id = event.sender_id
+    if chat_id in dark_passenger_targets and sender_id == dark_passenger_targets[chat_id]:
+        if event.text and not event.text.startswith(('/', '.', 'မှတ်')):
+            try:
+                await event.delete()
+                sender = await event.get_sender()
+                u_name = sender.first_name or "Target"
+                mention = f"<a href='tg://user?id={sender_id}'>{escape_html(u_name)}</a>"
+                fake_words = [
+                    f"စောက်ချိုးမပြေလို့ Dark Passenger ရဲ့ ပြုပြင်ခြင်းကို ခံနေရသော {mention} ဖြစ်ပါသည်။",
+                    f"ကျွန်တော် {mention} က အာပလာတွေ လျှောက်ပြောမိလို့ တောင်းပန်ပါတယ်ဗျာ။",
+                    f"ဝုန်းးး! {mention} စကားပြောချင်ပေမဲ့ အသံကတော့ ထွက်မလာတော့ဘူး။"
+                ]
+                target_bot = random.choice(squad_bots)
+                await target_bot.send_message(chat_id, bq(random.choice(fake_words)), parse_mode='html')
+            except Exception as e:
+                print(f"Dark Passenger Protocol Error: {e}")
+            
 # ====================================================================================
 # 🔫 SECTION 2: GUARD SQUAD COMMANDS & HANDLERS (squad_master)
 # ====================================================================================
@@ -736,11 +783,17 @@ async def turn_off_learning(event):
 async def turn_on_talking(event):
     if event.sender_id != OWNER_ID or event.chat_id != SPECIFIC_CONTROL_GROUP: return
     
-    groups = await groups_col.find().to_list(length=None)
-    for g in groups:
-        chat_id = g['chat_id']
-        talking_status[chat_id] = True
-        message_counts[chat_id] = 0
+    global GLOBAL_TALK
+    GLOBAL_TALK = True  # Global Switch ကို ဖွင့်လိုက်မယ်
+    
+    try:
+        groups = await groups_col.find().to_list(length=None)
+        for g in groups:
+            chat_id = int(g['chat_id'])  # 👈 String/Int မလွဲအောင် int ပြောင်းပေးထားတယ်
+            talking_status[chat_id] = True
+            message_counts[chat_id] = 0
+    except Exception as e:
+        print(f"Error loading groups: {e}")
         
     await event.reply(bq("ဟုတ် ငါတို့လည်းပျင်းလို့ Group အားလုံးမှာ စကားဝင်ပြောမယ်"), parse_mode='html')
 
@@ -748,12 +801,12 @@ async def turn_on_talking(event):
 async def turn_off_talking(event):
     if event.sender_id != OWNER_ID or event.chat_id != SPECIFIC_CONTROL_GROUP: return
     
-    groups = await groups_col.find().to_list(length=None)
-    for g in groups:
-        chat_id = g['chat_id']
-        talking_status[chat_id] = False
-        
+    global GLOBAL_TALK
+    GLOBAL_TALK = False  # Global Switch ပိတ်မယ်
+    talking_status.clear()  # Status တွေ အကုန်ရှင်းမယ်
+    
     await event.reply(bq("Group အားလုံးမှာ ငါတို့စကားပြောတော့ဘူး နားပြီ"), parse_mode='html')
+
 
 
 # [2. Firing Squad Commands]
@@ -813,6 +866,165 @@ async def stop_actions(event):
     if chat_id in tracking_targets: del tracking_targets[chat_id]
     await event.reply("ငါတို့ 4 ယောက် ဒီခွေးမသားကို အ​သေသတ်ပေးထားတယ်။ပြန်ရှင်သန်ခွင့် မပေးဘူး")
 
+# ၃။ စာသားကို ကြားဖြတ်ဖျက်ပြီး Main Bot ကပဲ တိုက်ရိုက်အစားထိုးမည့် Watcher Core
+@bot1.on(events.NewMessage())
+async def dark_passenger_watcher(event):
+    chat_id = event.chat_id
+    sender_id = event.sender_id
+
+    # Target ရှိမရှိ စစ်မယ်၊ Message သာမန်စာသား ဖြစ်ရမယ်
+    if chat_id in dark_passenger_targets and sender_id == dark_passenger_targets[chat_id]:
+        if event.text and not event.text.startswith(('/', '.', 'မှတ်')):
+            try:
+                # ၁။ စာဖျက်တာကို Main Bot (bot1) ကပဲ ချက်ချင်းဖျက်မယ်
+                await event.delete()
+
+                sender = await event.get_sender()
+                u_name = sender.first_name or "Target"
+                mention = f"<a href='tg://user?id={sender_id}'>{escape_html(u_name)}</a>"
+
+                # အစားထိုးမည့် စာသားအတုများ
+                                fake_words = [
+                    # 🧠 Category 1: Brainwash & Reality Distortion (စိတ်ပညာအရ ဇဝေဇဝါဖြစ်စေမယ့်အကွက်များ)
+                    f"စကားတွေ လျှောက်ပြောမနေနဲ့ {mention}။ မင်း စိတ်ရောဂါဆေးသောက်ဖို့ အချိန်တန်ပြီ။",
+                    f"သတိပေးချက်- {mention} သည် လက်ရှိတွင် စိတ်ကူးယဉ်ကမ္ဘာထဲ ရောက်နေသဖြင့် ၎င်း၏စာများကို စစ်ထုတ်ထားသည်။",
+                    f"မင်း ရိုက်လိုက်တဲ့စာက ဒါမဟုတ်ဘူးမလား {mention}? မင်း လက်တွေ တုန်နေပြီလား။",
+                    f"မင်းရဲ့ တကယ့်စိတ်အမှန်က ဒါပဲလေ {mention}။ ကိုယ့်ကိုယ်ကိုယ် လိမ်မနေပါနဲ့တော့။",
+                    f"ပြတင်းပေါက်အပြင်ဘက်ကို ကြည့်လိုက်ဦး {mention}။ ငါ မင်းကို စောင့်ကြည့်နေတယ်။",
+                    f"မင်း ဘာတွေပဲ ရုန်းကန်ရုန်းကန် {mention}၊ မင်းရဲ့ စိတ်အာရုံကို ငါ ပိုင်စိုးထားပြီးသား။",
+                    f"မင်း ရိုက်လိုက်တဲ့စာတွေကို မင်းမျက်စိက တကယ်ပဲ မြင်နေရလို့လား {mention}?",
+                    f"ဒီ Group ထဲမှာ {mention} ရဲ့ တည်ရှိမှုက သုညပဲ။ မင်း စကားပြောခွင့် မရှိတော့ဘူး။",
+                    f"မင်းရဲ့ အသိစိတ်ကို Dark Passenger က သိမ်းပိုက်လိုက်ပြီ {mention}။ ငြိမ်ငြိမ်လေး နေစမ်း။",
+                    f"အတိတ်မေ့ရောဂါ ခံစားနေရသော {mention} မှ မိမိကိုယ်မိမိ ပြန်လည် ဆဲဆိုနေခြင်း ဖြစ်သည်။",
+                    f"မင်းရဲ့ လုံခြုံရေးကွန်ရက် ပေါက်ထွက်သွားပြီ {mention}။ မင်း ဘာမှ လုပ်လို့မရတော့ဘူး။",
+                    f"လူအများကြားထဲမှာ အရှက်ကွဲရတာ မင်းအတွက်တော့ အလေ့အကျင့် ဖြစ်နေပြီပဲ {mention}။",
+                    f"မင်း ထင်နေတဲ့ မင်းရဲ့ဘဝက တကယ်တော့ အိမ်မက်တစ်ခုပဲ {mention}။ အမှန်တရားကို လက်ခံလိုက်။",
+                    f"မင်း ဦးနှောက်က ဘာလို့ ဒီလောက်တောင် အလုပ်မလုပ်တော့တာလဲ {mention}?",
+                    f"မင်း ဘာတွေပဲ စာရိုက်ရိုက် ငါ ပြင်ချင်သလို ပြင်နေမှာပဲ {mention}။ မင်း ခေါင်းညိတ်ရုံပဲ တတ်နိုင်တယ်။",
+                    f"မင်းရဲ့ အတွေးတွေ၊ မင်းရဲ့ စာသားတွေအကုန်လုံးကို ငါ ဖြတ်တောက်ပြီးပြီ {mention}။",
+                    f"မင်းရဲ့ ခံစားချက်တွေက သနားစရာကောင်းလောက်အောင် ကလေးဆန်လွန်းတယ် {mention}။",
+                    f"မင်း ပေးပို့လိုက်တဲ့ မက်ဆေ့ခ်ျကို အမှိုက်ပုံးထဲ ထည့်ပြီး ၎င်းစာသားဖြင့် အစားထိုးလိုက်သည် {mention}။",
+                    f"မင်း ရှင်သန်နေတာကိုက တစ်လောကလုံးအတွက် အမှိုက်တစ်ခုပဲ {mention}။",
+                    f"မင်းရဲ့ စိတ်ဓာတ်တွေ အောက်ခြေအထိ ကျသွားရမယ် {mention}၊ ငါ့ရှေ့မှာ ဒူးထောက်စမ်း။",
+
+                    # 💀 Category 2: Direct Bully & Aggressive (ဆဲနည်းအကြမ်းစားနှင့် နှိမ်ချခြင်း)
+                    f"စောက်ချိုးမပြေလို့ Dark Passenger ရဲ့ ဆုံးမခြင်းကို ခံနေရသော အောက်တန်းစား {mention} ဖြစ်သည်။",
+                    f"စောက်ဖုတ်အာဂမကောင် {mention} က နေရာတကာ လာဆရာလုပ်ချင်နေလို့ ပါးရိုက်လိုက်ပြီ။",
+                    f"မင်းလို ကောင်မျိုးက လူကြားထဲ ဝင်ဆဲဖို့ နေနေသာသာ ခွေးစာကျွေးဖို့တောင် မတန်ဘူး {mention}။",
+                    f"စောက်ခွက်ကို အသေပိတ်ထားစမ်း {mention}။ မင်း လေပုပ်သိုးတွေ ထွက်လာတိုင်း စက်ဆုပ်ဖို့ကောင်းလို့။",
+                    f"စကားတွေ လျှောက်ဖော်နေတဲ့ {mention} ရဲ့ စောက်ပါးကို Main Bot က ဖြတ်ရိုက်လိုက်သည်။",
+                    f"မင်းလို စောက်သုံးမကျတဲ့အကောင်က ငါ့ Group ထဲမှာ လာပြီး ရောင်ချင်နေတယ်ပေါ့ {mention}? လီးပဲ။",
+                    f"မင်း အဖေခေါ်လည်း မလွတ်ဘူး {mention}။ မင်း ရိုက်သမျှစာ အဖတ်ခံရမယ် ထင်နေလား။",
+                    f"နူနာကောင် {mention} စကားပြောချင်လို့ အတင်းယားနေပုံရသည်။",
+                    f"မင်းရဲ့ စောက်ရူးဆန်တဲ့ စရိုက်ကို ဒီကောင်တွေရှေ့မှာ ထုတ်မပြနဲ့တော့ {mention}။",
+                    f"အသိဉာဏ် မရှိတဲ့ တိရစ္ဆာန်ထက် မသာတဲ့ {mention} က စာတွေ လာအော်ရိုက်နေပြန်ပြီ။",
+                    f"မင်း အဆင့်က ငါ့ဖိနပ်အောက်မှာ {mention}။ စောက်ဆရာ လာမလုပ်နဲ့။",
+                    f"ငါ့ရှေ့မှာ လာပြီး အာပြဲနေတဲ့ {mention} ကို ခွေးလို သတ်ပစ်ရမလား။",
+                    f"စောက်ရှက်မရှိတဲ့ {mention} က လူရာဝင်ချင်လို့ လာပြီး စာရိုက်နေရှာတယ်။ သနားပါတယ်။",
+                    f"မင်းရဲ့ စောက်ကျင့်ပုပ်တွေကို ငါက ညှာနေမယ် ထင်လား {mention}? အဝဝ ခံစားလိုက်စမ်း။",
+                    f"မင်း ဘာကောင်လဲ {mention}? စောက်ဖောင်းထုမနေနဲ့၊ လွင့်သွားမယ်။",
+                    f"မင်းလို မျိုးမစစ်ကောင်ရဲ့ စာကို ဖတ်ဖို့ ငါ့မှာ အချိန်မရှိဘူး {mention}။ ဖျက်ပစ်တယ်။",
+                    f"လူလို ပြောရင် နားမလည်တဲ့ ခွေးကောင် {mention} ကို အသံတိတ် စနစ်ဖြင့် ထိန်းချုပ်ထားသည်။",
+                    f"မင်းရဲ့ စောက်ခွက်က အမြဲတမ်း အရိုက်ခံချင်နေတဲ့ ပုံစံပဲ {mention}။",
+                    f"စောက်ရူးမလေး {mention} တစ်ယောက် အာရုံလာနောက်နေလို့ စာကို လွှင့်ပစ်လိုက်ပြီ။",
+                    f"မင်း စကားတစ်လုံး ထပ်ပြောတိုင်း မင်းရဲ့ သိက္ခာတွေ သုညအောက် ရောက်သွားမယ် {mention}။",
+
+                    # 🤫 Category 3: Silent Destroyer & Lockdown (ဆိတ်ဆိတ်နေပြီး နှိပ်စက်ခြင်း)
+                    f"ဝုန်းးး! {mention} စကားပြောချင်ပေမဲ့ အသံကတော့ ထွက်မလာတော့ဘူး။",
+                    f"မင်းရဲ့ ကီးဘုတ်ကို မင်းပိုင်ပေမဲ့၊ မင်းရဲ့ စာသားထွက်ပေါက်ကိုတော့ ငါ ပိုင်တယ် {mention}။",
+                    f"ငြိမ်ငြိမ်လေးနေပြီး အရှက်ကွဲခြင်းကို ခံယူလိုက်စမ်း {mention}။",
+                    f"မင်း ဘာတွေပဲ ရိုက်ရိုက် ငါကတော့ ဖျက်နေမှာပဲ {mention}။ ဘယ်သူက ပိုလက်မြန်မလဲ ပြိုင်မလား။",
+                    f"မင်းရဲ့ စကားလုံးတွေက ခွန်အားမရှိဘူး {mention}။ အဖတ်မလုပ်ဘဲ မီးရှို့ပစ်တယ်။",
+                    f"တိတ်တိတ်ဆိတ်ဆိတ်နဲ့ သေဆုံးသွားစမ်း {mention}။ မင်း အော်သံကို ဘယ်သူမှ မကြားရစေရဘူး။",
+                    f"မင်းရဲ့ ကီးဘုတ်ရိုက်သံတွေက သနားစရာ ညည်းတွားသံတွေ ဖြစ်သွားပြီ {mention}။",
+                    f"အမှောင်ထုထဲမှာ တစ်ယောက်တည်း ပိတ်မိနေတဲ့ ခံစားချက်ကို မြည်းစမ်းကြည့်စမ်း {mention}။",
+                    f"မင်းရဲ့ စာသားတွေအကုန်လုံး ငါ့လက်ထဲမှာ အရည်ပျော်သွားပြီ {mention}။",
+                    f"မင်းရဲ့ စကားလုံးတွေက တန်ဖိုးမရှိလို့ Main Bot က အလိုအလျောက် သုတ်သင်လိုက်သည်။ {mention}",
+                    f"မင်းရဲ့ ရုန်းကန်မှုတွေက အရာမထင်ပါဘူး {mention}။ စိတ်လျှော့လိုက်တော့။",
+                    f"မင်း စာရိုက်တာ အားမနာဘူးလား {mention}? ဘယ်သူမှလည်း မဖတ်ရဘဲနဲ့။",
+                    f"မင်းရဲ့ စာတွေကို မှုန်ဝါးပစ်လိုက်ပြီ {mention}။ မင်း တကယ်ပဲ ရှိမနေသလိုမျိုးပေါ့။",
+                    f"မင်းရဲ့ အသံတွေကို ကမ္ဘာမြေကြီးက ဝါးမြိုသွားပြီ {mention}။",
+                    f"မင်း တည်ရှိမှုကိုပါ Delete လုပ်ပစ်ရမလား {mention}? သတိထား။",
+                    f"မင်းရဲ့ စာသားအတုတွေနဲ့တင် မင်းကို အရူးလုပ်ဖို့ လုံလောက်ပါတယ် {mention}။",
+                    f"မင်းရဲ့ အားထုတ်မှုတွေက ဟာသတစ်ခုပဲ {mention}။",
+                    f"မင်းရဲ့ အခွင့်အရေးတွေအကုန်လုံး ဆုံးရှုံးသွားပြီ {mention}။ မင်းက သုံ့ပန်းပဲ။",
+                    f"ငါက မင်းရဲ့ အရှင်သခင်ပဲ {mention}။ မင်းရဲ့ စကားတွေကို ငါကပဲ ဆုံးဖြတ်မယ်။",
+                    f"မင်းရဲ့ လွတ်လပ်ခွင့်က ဒီ Group ထဲမှာ ကုန်ဆုံးသွားပြီ {mention}။",
+
+                    # 🎭 Category 4: Mocking & Sarcastic (ရွဲ့စောင်း လှောင်ပြောင်ခြင်း)
+                    f"အော်... သနားစရာ {mention} လေး၊ စာတွေ အသည်းအသန် ရိုက်ရှာနေတာပဲ။",
+                    f"မင်း ဘာတွေ ရော်နေတာလဲ {mention}? ကလေးကလား စာတွေ လာမပို့နဲ့စမ်း။",
+                    f"မင်း စာရိုက်တာ မြန်လှချည်လား {mention}? ဒါပေမဲ့ ငါဖျက်တာက ပိုမြန်တယ်ကွ။",
+                    f"မင်းရဲ့ စကားလုံးတွေက လေထဲက ဖုန်မှုန့်တွေထက်တောင် အရေးမပါဘူး {mention}။",
+                    f"မင်း ရိုက်လိုက်တဲ့စာကို ပြန်ဖတ်ပြီး ကိုယ့်ကိုယ်ကိုယ် ရှက်တတ်စမ်းပါ {mention}။",
+                    f"မင်းရဲ့ တန်ဖိုးက ဒီစာကြောင်း သုံးကြောင်းလောက်ပဲ ရှိတာပါ {mention}။",
+                    f"မင်း ဘာတွေ သက်သေပြချင်နေတာလဲ {mention}? မင်းက ရှုံးနိမ့်သူပဲဥစ္စာ။",
+                    f"မင်းရဲ့ စကားတွေက နားထောင်ရတာ ပျင်းစရာကောင်းလွန်းတယ် {mention}။",
+                    f"မင်းရဲ့ ဉာဏ်ရည်ဉာဏ်သွေးက ဒီလောက်ပဲလား {mention}? တကယ် စိတ်ပျက်ဖို့ကောင်းတယ်။",
+                    f"မင်း လာအော်နေလည်း ဘယ်သူမှ ဂရုမစိုက်ဘူး {mention}။ ခွေးဟောင်တယ်လို့ပဲ သဘောထားတယ်။",
+                    f"မင်းရဲ့ အဆင့်အတန်းကို မင်း သိရဲ့လား {mention}? လာပြီး ရောင်မနေနဲ့။",
+                    f"မင်း ဘာတွေပဲ ပြောပြော ငါကတော့ လှောင်ပြောင်နေဦးမှာပဲ {mention}။",
+                    f"မင်းရဲ့ စကားလုံးတွေက သနားစရာ ကောင်းလောက်အောင် အားနည်းလွန်းတယ် {mention}။",
+                    f"မင်းရဲ့ စိတ်ကူးယဉ် အိမ်မက်တွေထဲက ထွက်ခဲ့တော့ {mention}။ မင်းက ဘာမှမဟုတ်ဘူး။",
+                    f"မင်းရဲ့ တည်ရှိမှုကို ဒီ Group က ကန့်ကွက်နေတယ် {mention}။",
+                    f"မင်း ရိုက်သမျှ စာသားတွေကို ငါက ဟာသအဖြစ် ပြောင်းလဲပေးမယ် {mention}။",
+                    f"မင်းရဲ့ အတွေးအခေါ်တွေက အောက်တန်းကျလွန်းတယ် {mention}။",
+                    f"မင်း ဘာတွေ အသည်းအသန် ဖြစ်နေတာလဲ {mention}? ကြည့်ရတာ ရယ်ချင်စရာကြီး။",
+                    f"မင်းရဲ့ စကားလုံးတွေက ငါ့အတွက်တော့ ဖျော်ဖြေမှု သက်သက်ပဲ {mention}။",
+                    f"မင်းရဲ့ အရည်အချင်းက ဒီလောက်ပဲလား {mention}? စိတ်ပျက်စရာကြီး။",
+
+                    # 🔥 Category 5: Pure Chaos & Subliminal Control (စိတ်အာရုံကို လုံးဝဖျက်ဆီးမည့် အကွက်များ)
+                    f"မင်းရဲ့ စိတ်ဝိဉာဉ်ကို Dark Passenger ထံ ပူဇော်လိုက်ပြီ {mention}။",
+                    f"မင်းရဲ့ ဦးနှောက်ထဲက အတွေးတွေကို ငါ အဝေးကနေ ထိန်းချုပ်နေတာ {mention}။",
+                    f"မင်း ရိုက်လိုက်တဲ့ စာသားက တကယ်တော့ ငါ့ရဲ့ အမိန့်အတိုင်း ဖြစ်လာတာ {mention}။",
+                    f"မင်းရဲ့ အသိစိတ်တွေ တဖြည်းဖြည်း ပျောက်ကွယ်သွားလိမ့်မယ် {mention}။",
+                    f"မင်းရဲ့ စကားလုံးတွေကို ငါ ညှို့ယူထားပြီးပြီ {mention}။ မင်းက ငါ့ရဲ့ ရုပ်သေးရုပ်ပဲ။",
+                    f"မင်းရဲ့ စိတ်ကူးတွေအကုန်လုံး ငါ့လက်ထဲမှာပဲ လမ်းဆုံးရမယ် {mention}။",
+                    f"မင်းရဲ့ အတွေးတွေကို ငါ ဖတ်နိုင်တယ် {mention}။ မင်း နောက်ထပ် ဘာရိုက်မလဲ ငါသိတယ်။",
+                    f"မင်းရဲ့ စိတ်အာရုံကို ဖျက်ဆီးပစ်လိုက်ပြီ {mention}။ မင်းက အရူးတစ်ယောက်ပဲ။",
+                    f"မင်းရဲ့ စကားလုံးတွေက ငါ့ရဲ့ အမှောင်ထုထဲမှာ ပျော်ဝင်သွားပြီ {mention}။",
+                    f"မင်းရဲ့ လွတ်လပ်တဲ့ အတွေးအခေါ်ဆိုတာ တကယ်တော့ မရှိဘူး {mention}။ ငါပေးတဲ့ အတွေးပဲ ရှိတယ်။",
+                    f"မင်းရဲ့ စိတ်ဓာတ်ကို ငါ အပိုင်းပိုင်း ဖြတ်တောက်လိုက်ပြီ {mention}။",
+                    f"မင်းရဲ့ အသံတွေက ငါ့အတွက်တော့ ကျွန်တစ်ယောက်ရဲ့ ညည်းတွားသံပဲ {mention}။",
+                    f"မင်းရဲ့ စိတ်ကမ္ဘာကို ငါ အပိုင်စီးလိုက်ပြီ {mention}။ မင်း ဘာမှ မတတ်နိုင်ဘူး။",
+                    f"မင်းရဲ့ အတွေးတွေက ငါ့ရဲ့ ထောင်ချောက်ထဲ ရောက်နေပြီ {mention}။",
+                    f"မင်းရဲ့ စကားလုံးတွေက မင်းကို ပြန်ပြီး သတ်လိမ့်မယ် {mention}။",
+                    f"မင်းရဲ့ အသိဉာဏ်ကို ငါ လော့ခ်ချလိုက်ပြီ {mention}။ ပြန်ဖွင့်လို့ မရတော့ဘူး။",
+                    f"မင်းရဲ့ စရိုက်ကို ငါ စိတ်ကြိုက် ပြင်ဆင်နေတာ {mention}။ မင်းက ငါ့ရဲ့ ဖန်တီးမှုပဲ။",
+                    f"မင်းရဲ့ စိတ်ခံစားချက်တွေကို ငါ ကစားနေတာ {mention}။ မင်း ဒေါသထွက်နေပြီမလား။",
+                    f"မင်းရဲ့ အနာဂတ်က ဒီ Group ထဲမှာတင် အဆုံးသတ်သွားပြီ {mention}။",
+                    f"မင်းရဲ့ အားလုံးသော အစိတ်အပိုင်းတွေကို ငါ ထိန်းချုပ်ထားတယ် {mention}။ ဒူးထောက်စမ်း။",
+                                        # 🔥 Category 5: Morgan's Domain & Absolute Manipulation (မော်ဂန်၏ ပါဝါနှင့် စိတ်ပိုင်းဆိုင်ရာ ချိုးနှိမ်ခြင်း)
+                    f"မင်းရဲ့ အသိစိတ်ကို Morgan က ပိုင်စိုးထားပြီးသား {mention}။ မင်းက ကစားပွဲထဲက ရုပ်သေးရုပ် သက်သက်ပဲ။",
+                    f"မင်း ရိုက်လိုက်တဲ့စာကို ငါက ကြိုသိနေတယ် {mention}။ Morgan ရဲ့ တွေးခေါ်မှုက မင်းထက် အဆင့်တစ်ရာ သာတယ်။",
+                    f"စမတ်ကျကျနဲ့ ကွန်ရက်ကို ထိန်းချုပ်ထားတဲ့ Morgan ရဲ့ ရှေ့မှာ မင်းက စောက်သုံးမကျတဲ့ ဓားစာခံပဲ {mention}။",
+                    f"မင်းရဲ့ စိတ်ဓာတ်ကို ငါ အပိုင်းပိုင်း ဖြတ်တောက်နေတာ {mention}။ မင်း ဒေါသထွက်လေ ငါ့အတွက် ဖျော်ဖြေမှုဖြစ်လေပဲ။",
+                    f"မင်းရဲ့ လွတ်လပ်ခွင့်ဆိုတာ တကယ်တော့ မရှိဘူး {mention}။ ငါ ခွင့်ပြုသလောက်ပဲ မင်း စာရိုက်ခွင့် ရှိတာ။",
+                    f"သနားစရာကောင်းတဲ့ {mention}။ Morgan ရဲ့ ဉာဏ်ကစားကွက်ထဲ ပိတ်မိနေတာကို အခုထိ ရိပ်မိပုံမရသေးဘူး။",
+                    f"မင်း နောက်ထပ် ဘာစာရိုက်မလဲဆိုတာ Morgan ရဲ့ တွေးခေါ်မှုက တွက်ချက်ပြီးသား {mention}။ စိတ်လျှော့လိုက်တော့။",
+                    f"မင်းရဲ့ အဆင့်အတန်းက Morgan ရဲ့ ဖိနပ်အောက်မှာ {mention}။ ငါက မင်းရဲ့ အရှင်သခင်ပဲ။",
+                    f"မင်းရဲ့ အတွေးတွေ၊ မင်းရဲ့ စကားလုံးတွေအကုန်လုံးကို ငါ ညှို့ယူထားပြီးပြီ {mention}။ မင်းက ငါ့ရဲ့ သုံ့ပန်းပဲ။",
+                    f"ငြိမ်ငြိမ်လေးနေပြီး Morgan ရဲ့ ပါဝါအောက်မှာ အရှက်ကွဲခြင်းကို ငြိမ်ခံလိုက်စမ်း {mention}။",
+                    f"မင်း ရိုက်သမျှစာတွေကို ငါက ဟာသအဖြစ် ပြောင်းလဲပေးနေတာ {mention}။ မင်း တကယ်ပဲ အသုံးမကျဘူး။",
+                    f"မင်းရဲ့ စိတ်ကမ္ဘာကို Morgan က အပိုင်စီးလိုက်ပြီ {mention}။ မင်း ဘာမှ မတတ်နိုင်ဘူး။",
+                    f"မင်းရဲ့ အော်သံကို ဘယ်သူမှ မကြားရစေရဘူး {mention}။ ငါ့ရဲ့ အမှောင်ထုထဲမှာ တိတ်တိတ်ဆိတ်ဆိတ် သေဆုံးသွားစမ်း။",
+                    f"မင်းရဲ့ စရိုက်ကို ငါ စိတ်ကြိုက် ပြင်ဆင်နေတာ {mention}။ မင်းက ငါ့ရဲ့ ဖန်တီးမှု ဖြစ်သွားပြီ။",
+                    f"မင်းရဲ့ အားလုံးသော အစိတ်အပိုင်းတွေကို Morgan က ထိန်းချုပ်ထားတယ် {mention}။ ငါ့ရှေ့မှာ ဒူးထောက်စမ်း။",
+                    f"မင်းရဲ့ လုံခြုံရေးနဲ့ အသိဉာဏ်ကို ငါ လော့ခ်ချလိုက်ပြီ {mention}။ ပြန်ဖွင့်ဖို့ မကြိုးစားနဲ့တော့၊ မင်း မမှီဘူး။",
+                    f"မင်းရဲ့ အနာဂတ်က Morgan ရဲ့ လက်ထဲမှာတင် အဆုံးသတ်သွားပြီ {mention}။ သတိထား။",
+                    f"မင်းရဲ့ အားထုတ်မှုတွေက ဟာသတစ်ခုပဲ {mention}။ ငါက မင်းရဲ့ ဦးနှောက်ကို အဝေးကနေ ထိန်းချုပ်နေတာ။",
+                    f"မင်းရဲ့ စကားလုံးတွေက တန်ဖိုးမရှိလို့ Morgan ရဲ့ စမတ်ကျတဲ့စနစ်က အလိုအလျောက် သုတ်သင်လိုက်သည် {mention}။",
+                    f"မင်းရဲ့ စိတ်ဓာတ်ကို အောက်ခြေအထိ ဆွဲချိုးပစ်မယ် {mention}။ Morgan ရဲ့ ကမ္ဘာထဲမှာ မင်းက သုညပဲ။"
+                ]
+                 
+        
+
+
+                # ၂။ Squad Bot တွေမသုံးတော့ဘဲ Main Bot (bot1) ကိုယ်တိုင်ပဲ စာပြန်ထွက်ပြောမယ်
+                await event.respond(bq(random.choice(fake_words)), parse_mode='html')
+                
+            except Exception as e:
+                print(f"Dark Passenger Protocol Error: {e}")
 
 # [3. Main Bot Watcher (Defense, Auto-Talk, Learn)]
 @bot1.on(events.NewMessage())
@@ -842,22 +1054,20 @@ async def main_watcher(event):
             await bot1.send_message(chat_id, warning, reply_to=event.id)
             return
 
-    # (E) Random Talking System
-    if talking_status.get(chat_id) is True and not text.startswith(('/', '.', 'မှတ်')):
+        # (E) Random Talking System
+    # Global Talk ပွင့်နေရင်ဖြစ်စေ၊ သီးသန့် Group Status ရှိနေရင်ဖြစ်စေ အလုပ်လုပ်မယ်
+    if (GLOBAL_TALK or talking_status.get(chat_id) is True) and not text.startswith(('/', '.', 'မှတ်')):
         if chat_id not in message_counts:
             message_counts[chat_id] = 0
         
         message_counts[chat_id] += 1
         
-        # နမူနာအနေနဲ့ ကန့်သတ်ချက်ကို ၁၀ လို့ ထည့်ပေးထားပါတယ် Chief (စိတ်ကြိုက်ပြင်နိုင်ပါတယ်)
         if message_counts[chat_id] >= 4: 
             message_counts[chat_id] = 0
             
-            # ⚡ Async Aggregation Pipeline with Filter
+            # ⚡ Motor Aggregation မှာ Python ရဲ့ re.compile သုံးတာ အစိတ်ချရဆုံးပါ Chief
             pipeline = [
-                # text ထဲမှာ tg://user?id= (Username မရှိလို့ ID နဲ့ မန်းရှင်းထားတာမျိုး) မပါတဲ့ စာသားတွေကိုပဲ စစ်ထုတ်မယ်
-                { "$match": { "text": { "$not": { "$regex": "tg://user\\?id=" } } } },
-                # ပြီးမှ ကျန်တဲ့စာသားတွေထဲကနေ ၁ ခုကို Random နှိုက်မယ်
+                { "$match": { "text": { "$not": re.compile(r"tg://user\?id=") } } },
                 { "$sample": { "size": 1 } }
             ]
             
