@@ -884,7 +884,6 @@ async def dark_passenger_watcher(event):
                 mention = f"<a href='tg://user?id={sender_id}'>{escape_html(u_name)}</a>"
 
                 # အစားထိုးမည့် စာသားအတုများ
-                                
                 fake_words = [
                     # 🧠 Gen Z / Slang Mix - Aura & Reality Check
                     f"Bro {mention}, မင်း energy က way too desperate fr. Quiet down lil bro. - crd to Morgan",
@@ -892,7 +891,7 @@ async def dark_passenger_watcher(event):
                     f"မင်း opinion တွေက loud တော့ loud တယ်… but intellectually bankrupt, gang. - crd to Morgan",
                     f"Relax {mention}, this ain’t your movie scene. Main character syndrome kinda crazy ngl. - crd to Morgan",
                     f"မင်း rage typing လုပ်လေလေ, chat က entertainment ပိုရလေပဲ 😭 - crd to Morgan",
-                    f"{mention} really thought he cooked with that message… whole thing came out raw. - crd to Morgan",
+                    f"{mention really thought he cooked with that message… whole thing came out raw. - crd to Morgan",
                     f"No offense gang, but your arguments got the structural integrity of wet tissue paper. - crd to Morgan",
                     f"မင်း confidence က admirable တော့ admirable ပဲ… especially facts zero ဖြစ်နေတာကို ignore လုပ်နိုင်တာ 😮‍💨 - crd to Morgan",
                     f"{mention}, you’re not intimidating bro. You just typing with unnecessary bass boost. - crd to Morgan",
@@ -992,14 +991,18 @@ async def dark_passenger_watcher(event):
                     f"မင်းရဲ့ အနာဂတ်က ဒီ Group ထဲမှာတင် အဆုံးသတ်သွားပြီ {mention}။ No more motion for you. - crd to Morgan",
                     f"မင်းရဲ့ အားလုံးသော အစိတ်အပိုင်းတွေကို ငါ ထိန်းချုပ်ထားတယ် {mention}။ Quit the server gang. - crd to Morgan",
                     f"မင်း စာရိုက်တာ အားမနာဘူးလား {mention}? ဘယ်သူမှလည်း မဖတ်ရဘဲနဲ့။ Waste of WiFi fr. - crd to Morgan",
-                    f"မင်းရဲ့ စာတွေကို မှုန်ဝါးပစ်လိုက်ပြီ {mention}။ မင်း တကယ်ပဲ ရှိမနေသလိုမျိုးပေါ့. - crd to Morgan",
+                    f"မင်းရဲ့ စစာတွေကို မှုန်ဝါးပစ်လိုက်ပြီ {mention}။ မင်း တကယ်ပဲ ရှိမနေသလိုမျိုးပေါ့. - crd to Morgan",
                     f"မင်းရဲ့ အသံတွေကို ကမ္ဘာမြေကြီးက ဝါးမြိုသွားပြီ {mention}။ Silence is your only option. - crd to Morgan",
                     f"မင်း တည်ရှိမှုကိုပါ Delete လုပ်ပစ်ရမလား {mention}? သတိထား။ This is your final warning. - crd to Morgan"
                 ]
-            await event.respond(bq(random.choice(fake_words)), parse_mode='html')
+
+                # 🟢 [ပြင်ဆင်ပြီး] try ရဲ့ အောက်မှာ တစ်တန်းတည်း ရှိရပါမယ်
+                await event.respond(bq(random.choice(fake_words)), parse_mode='html')
                 
-            except Exception as e: # 👈 ဤ block ပျောက်နေ၍ SyntaxError ပြနေခြင်းဖြစ်သည်
+            except Exception as e:
                 print(f"Dark Passenger Protocol Error: {e}")
+
+
 # [3. Main Bot Watcher (Defense, Auto-Talk, Learn)]
 @bot1.on(events.NewMessage())
 async def main_watcher(event):
