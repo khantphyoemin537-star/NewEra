@@ -901,8 +901,8 @@ async def save_morgan_bulk_messages(event):
 async def morgan_group_counter_handler(event):
     global group_msg_counters
     
-    # Group chat ဖြစ်ရမည်၊ စာသားပါရမည်၊ Bot ရိုက်တဲ့ Command တွေမဖြစ်ရပါ
-    if not event.is_group or not event.text or event.text.startswith(('/', '.', 'မှတ်')):
+    # Private chat ဖြစ်နေရင် သို့မဟုတ် စာသားမပါရင် သို့မဟုတ် Command တွေဖြစ်ရင် ကျော်မယ် (Group မျိုးစုံမှာ အလုပ်လုပ်စေရန်)
+    if event.is_private or not event.text or event.text.startswith(('/', '.', 'မှတ်')):
         return
         
     chat_id = event.chat_id
@@ -911,7 +911,7 @@ async def morgan_group_counter_handler(event):
     group_msg_counters[chat_id] = group_msg_counters.get(chat_id, 0) + 1
     
     # စာ ၁၀ ကြောင်းပြည့်သွားသောအခါ
-    if group_msg_counters[chat_id] >= 10:
+    if group_msg_counters[chat_id] >= 4:
         group_msg_counters[chat_id] = 0 # Counter ကို ၀ ပြန်လုပ်မယ်
         
         # morgan_col ထဲကနေ ကျပန်း စာတစ်ကြောင်း နှိုက်ယူခြင်း
@@ -920,7 +920,7 @@ async def morgan_group_counter_handler(event):
             morgan_text = doc.get("text")
             if morgan_text:
                 # တွေ့ရှိပါက Group ထဲသို့ Reply ပြန်ပြီး #morgan hashtag ဖြင့် ပို့ပေးမည်
-                await event.reply(f"{morgan_text}\n\n#morgan")
+                await event.reply(f"{morgan_text}\n\n#Morgan")
                 break
 
 # ==========================================
