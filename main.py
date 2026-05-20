@@ -12,16 +12,15 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from telethon.tl.types import User
 from html import escape as escape_html
 from telethon import TelegramClient, events, types, Button 
-# --- ဒီကောင်တွေကို 'from openai import OpenAI' ရဲ့ အောက်မှာ သွားပေါင်းပေးပါ ဆရာကြီး ---
-from telethon.tl.functions.channels import GetParticipants, GetAdminLogRequest
-from telethon.tl.types import ChannelParticipantsAdmins, ChannelAdminLogEventsFilter
 
-from telethon.tl.functions.channels import GetParticipantRequest
+# --- ⚠️ ERROR ဖြစ်စေတဲ့ GetParticipants ကို ဖယ်ရှားပြီး သေချာ ပြန်ပြင်ထားတဲ့အပိုင်း ---
+from telethon.tl.functions.channels import GetAdminLogRequest, GetParticipantsRequest
 from telethon.tl.types import (
     ChannelParticipantAdmin, 
     ChannelParticipantCreator, 
     ChannelParticipantsAdmins,
-    ChatAdminRights
+    ChatAdminRights,
+    ChannelAdminLogEventsFilter
 )
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 from openai import OpenAI 
@@ -131,7 +130,8 @@ async def check_ban_rights(chat_id, user_id):
 async def update_admin_cache(client, chat_id):
     """Group ရဲ့ Admin စာရင်းကို Cache ထဲမှာ Update လုပ်ပေးမည့် Function"""
     try:
-        admins = await client(GetParticipants(
+        # 🎯 GetParticipants နေရာတွင် GetParticipantsRequest ဟု ပြောင်းလဲထားပါသည်
+        admins = await client(GetParticipantsRequest(
             channel=chat_id,
             filter=ChannelParticipantsAdmins(),
             offset=0, limit=100, hash=0
@@ -142,6 +142,7 @@ async def update_admin_cache(client, chat_id):
     except Exception as e:
         print(f"Error updating admin cache for {chat_id}: {e}")
         return admin_cache.get(chat_id, set())
+
 
 async def get_group_uptime(chat_id):
     """Group စတင်ခြေရာခံသည့် အချိန်မှစ၍ လက်ရှိအထိ စုစုပေါင်း စက္ကန့်ကို တွက်ချက်ခြင်း"""
