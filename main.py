@@ -72,7 +72,7 @@ groups_col = db["active_groups"]
 talk_col = db["random_talk"]
 talker_col = db["talker"]
 welcome_col = db["custom_welcome"] 
-
+ans_col = db["chatbot_answers"]
 # ==========================================
 # 🤖 CLIENT SETUP (SINGLE BOT)
 # ==========================================
@@ -178,6 +178,110 @@ async def welcome_goodbye(event):
 
     except Exception as e:
         print(f"Welcome/Goodbye Error: {e}")
+# ==========================================
+# 🧠 CHATBOT TRAINING SYSTEM (TELETHON)
+# ==========================================
+
+# Training Mode ရဲ့ Global Status
+TRAINING_ENABLED = True
+
+# 👑 OWNER COMMAND: စာသင်စနစ် ဖွင့်ခြင်း (/ron)
+@bot1.on(events.NewMessage(pattern=r'^/ron$'))
+async def turn_on_training(event):
+    global TRAINING_ENABLED
+    if event.sender_id != OWNER_ID:
+        return
+        
+    TRAINING_ENABLED = True
+    await event.reply("✅ Sovereign Training Mode ကို ဖွင့်လိုက်ပါပြီ။\nယခုမှစ၍ /r ဖြင့် စာသင်နိုင်ပါသည်။")
+
+# 👑 OWNER COMMAND: စာသင်စနစ် ပိတ်ခြင်း (/roff)
+@bot1.on(events.NewMessage(pattern=r'^/roff$'))
+async def turn_off_training(event):
+    global TRAINING_ENABLED
+    if event.sender_id != OWNER_ID:
+        return
+        
+    TRAINING_ENABLED = False
+    await event.reply("⛔ Sovereign Training Mode ကို ပိတ်လိုက်ပါပြီ။\nယခုတွင် /r Command အသုံးပြု၍ မရနိုင်တော့ပါ။")
+
+# 📝 TRAINING COMMAND: အဖြေများ ခွဲထုတ်ပြီး DB တွင် သိမ်းဆည်းခြင်း (/r [မေးခွန်း])
+@bot1.on(events.NewMessage(pattern=r'^/r(\s+.*)?$'))
+async def train_bot(event):
+    global TRAINING_ENABLED
+    
+    # စစ်ဆေးချက် ၁: Training Mode ဖွင့်ထားသလား
+    if not TRAINING_ENABLED:
+        await event.reply("⚠️ လက်ရှိတွင် Owner မှ Chatbot Training Mode ကို ပိတ်ထားပါတယ်ဗျာ။")
+        return
+
+    # စစ်ဆေးချက် ၂: Reply ပြန်ထားခြင်း ရှိမရှိ
+    if not event.is_reply:
+        await event.reply("❌ အသုံးပြုပုံ မှားယွင်းနေပါသည်။\nအဖြေများပါသော စာသားကို Reply ပြန်ပြီး `/r [မေးခွန်း]` ဟု ရိုက်ပေးပါ။\nဥပမာ- `/r နေကောင်းလား`")
+        return
+
+    # စစ်ဆေးချက် ၃: Keyphrase (မေးခွန်း) ပါမပါ
+    args = event.pattern_match.group(1)
+    if not args:
+        await event.reply("❌ မေးခွန်း (Keyphrase) ထည့်သွင်းပေးရန် လိုအပ်ပါသည်။")
+        return
+        
+    keyphrase = args.strip().lower()
+
+    # Reply ထားတဲ့ Message မူရင်းစာသားကို ဆွဲယူခြင်း
+    reply_msg = await event.get_reply_message()
+    if not reply_msg or not reply_msg.text:
+        await event.reply("❌ စာသား (Text) ပါဝင်သော Message ကိုသာ သင်ပေး၍ ရပါမည်။")
+        return
+
+    # 🔍 Regex Logic: မျက်တောင်အဖွင့်အပိတ် " " ကြားထဲက စာလုံးများကို တစ်ကြောင်းချင်းစီ ခွဲထုတ်ခြင်း
+    new_responses = re.findall(r'"([^"]*)"', reply_msg.text)
+    
+    if not new_responses:
+        await event.reply("❌ အဖြေများကို မျက်တောင်အဖွင့်အပိတ် \" \" ထဲတွင် တစ်ကြောင်းချင်းစီ ထည့်ပေးပါဗျာ။\nဥပမာ -\n\"အဖြေ ၁\"\n\"အဖြေ ၂\"")
+        return
+
+    # 🗄️ Motor Async MongoDB Operation (ans_col သို့ ပြောင်းလဲထားသည်)
+    existing_doc = await ans_col.find_one({"keyphrase": keyphrase})
+    
+    if existing_doc:
+        # ရှိပြီးသားဆိုရင် အသစ်ထပ်ပေါင်းမယ် (စာသားတူရင် ဖယ်မည့် set စနစ်)
+        existing_responses = existing_doc.get("responses", [])
+        updated_responses = list(set(existing_responses + new_responses))
+        await ans_col.update_one(
+            {"keyphrase": keyphrase}, 
+            {"$set": {"responses": updated_responses}}
+        )
+        action_msg = f"အဖြေအသစ်များကို ပေါင်းထည့်လိုက်ပါပြီ။ (စုစုပေါင်းအဖြေ: {len(updated_responses)} ခု)"
+    else:
+        # အသစ်စက်စက်ဆိုရင် Insert လုပ်မယ်
+        await ans_col.insert_one({"keyphrase": keyphrase, "responses": new_responses})
+        action_msg = "အစုံလိုက် အသစ်စက်စက် မှတ်သားလိုက်ပါပြီ။"
+
+    # သင်ကြားမှု အောင်မြင်ကြောင်း ရိုးရိုးစာသားဖြင့် ပြန်ပြပေးခြင်း
+    debug_list = "\n".join([f"• {r}" for r in new_responses])
+    await event.reply(f"✨ စကားလုံးအသစ် မှတ်သားမှု အောင်မြင်သည်!\n🔑 Key: {keyphrase}\n📝 ခွဲထုတ်ရရှိသည့် အဖြေများ ({len(new_responses)} ခု):\n{debug_list}\n\n💡 {action_msg}")
+
+
+# 💬 AUTOMATIC CHAT RESPONDER: လူတွေပြောတာနဲ့ ဆက်စပ်ပြီး ပြန်ဖြေပေးသည့် အပိုင်း
+@bot1.on(events.NewMessage(incoming=True))
+async def chatbot_auto_responder(event):
+    # private chat တွေ သို့မဟုတ် command တွေကိုကျော်မယ်
+    if event.is_private or not event.text or event.text.startswith(('/', '.', 'မှတ်')):
+        return
+
+    user_text = event.text.lower()
+    
+    # ans_col ထဲက Data တွေကို လှမ်းစစ်ခြင်း
+    cursor = ans_col.find()
+    async for doc in cursor:
+        keyphrase = doc.get("keyphrase")
+        if keyphrase and keyphrase in user_text:
+            responses = doc.get("responses", [])
+            if responses:
+                chosen_response = random.choice(responses)
+                await event.reply(chosen_response)
+                break
 
 @bot1.on(events.NewMessage)
 async def sticker_spam_(event):
