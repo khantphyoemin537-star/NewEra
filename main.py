@@ -73,6 +73,7 @@ talk_col = db["random_talk"]
 talker_col = db["talker"]
 welcome_col = db["custom_welcome"] 
 ans_col = db["chatbot_answers"]
+morgan_col = db["morgan_talk"] 
 # ==========================================
 # 🤖 CLIENT SETUP (SINGLE BOT)
 # ==========================================
@@ -92,7 +93,8 @@ learning_status = {}
 talking_status = {}       
 message_counts = {}       
 GLOBAL_TALK = False 
-
+TRAINING_ENABLED_MORGAN = False      # Morgan စာသင်စနစ်အတွက် Global Status
+group_msg_counters = {}
 # ==========================================
 # 🛠️ HELPERS
 # ==========================================
@@ -846,6 +848,80 @@ async def dark_passenger_watcher(event):
         talker = await talker_col.find_one({"user_id": sender_id})
         if talker and len(text) > 1 and not re.search(r'https?://', text):
             await talk_col.insert_one({"text": text, "nickname": talker.get("nickname", "Anonymous"), "chat_id": chat_id})
+# ====================================================================================
+# 🎭 MORGAN AUTOMATIC TALK SYSTEM (STRICT OWNER DM & GROUP TRIGGER)
+# ====================================================================================
+
+# 👑 OWNER DM COMMAND: Morgan စာသင်စနစ် ဖွင့်ခြင်း (/ron)
+@bot1.on(events.NewMessage(pattern=r'^/ron$'))
+async def turn_on_morgan_training(event):
+    global TRAINING_ENABLED_MORGAN
+    if not event.is_private or event.sender_id != OWNER_ID:
+        return
+        
+    TRAINING_ENABLED_MORGAN = True
+    await event.reply("✅ Morgan Training Mode ကို ဖွင့်လိုက်ပါပြီ။\nယခုမှစ၍ Bot DM တွင် စာသားများကို အစုလိုက် (\" \" ခံပြီး) ပို့နိုင်ပါပြီ ဆရာကြီး။")
+
+# 👑 OWNER DM COMMAND: Morgan စာသင်စနစ် ပိတ်ခြင်း (/roff)
+@bot1.on(events.NewMessage(pattern=r'^/roff$'))
+async def turn_off_morgan_training(event):
+    global TRAINING_ENABLED_MORGAN
+    if not event.is_private or event.sender_id != OWNER_ID:
+        return
+        
+    TRAINING_ENABLED_MORGAN = False
+    await event.reply("⛔ Morgan Training Mode ကို ပိတ်လိုက်ပါပြီ။")
+
+# 📝 DM TRAINING: Owner ပို့လိုက်သော အဖြေ ၁၀၀ အစုလိုက်ကို ဖတ်ပြီး DB တွင် သိမ်းခြင်း
+@bot1.on(events.NewMessage(incoming=True))
+async def save_morgan_bulk_messages(event):
+    global TRAINING_ENABLED_MORGAN
+    # Owner ဖြစ်ပြီး DM ဖြစ်ရမည်၊ Command မဟုတ်ရပါ
+    if not event.is_private or event.sender_id != OWNER_ID or event.text.startswith('/'):
+        return
+    
+    # /ron မလုပ်ထားရင် အလုပ်မလုပ်ပါ
+    if not TRAINING_ENABLED_MORGAN:
+        return
+
+    # မျက်တောင်အဖွင့်အပိတ် " " ထဲက စာသားများကို ရှာဖွေခွဲထုတ်ခြင်း
+    new_responses = re.findall(r'"([^"]*)"', event.text)
+    
+    if not new_responses:
+        return await event.reply("❌ အဖြေများကို မျက်တောင်အဖွင့်အပိတ် \" \" ထဲတွင် တစ်ကြောင်းချင်းစီ ထည့်ပေးပါဗျာ။")
+
+    # DB ထဲသို့ Bulk Insert (အစုလိုက်) တစ်ခါတည်း သိမ်းဆည်းခြင်း
+    documents = [{"text": r.strip()} for r in new_responses if r.strip()]
+    if documents:
+        await morgan_col.insert_many(documents)
+        await event.reply(f"✨ Morgan စကားပြောစနစ်အတွက် စာသားအသစ် ({len(documents)} ခု) ကို DB တွင် အောင်မြင်စွာ မှတ်သားပြီးပါပြီဗျာ!")
+
+# 💬 GROUP CHAT WATCHER: စာ ၁၀ ကြောင်းပြည့်တိုင်း #morgan ဖြင့် ဝင်ပြောခြင်း
+@bot1.on(events.NewMessage(incoming=True))
+async def morgan_group_counter_handler(event):
+    global group_msg_counters
+    
+    # Group chat ဖြစ်ရမည်၊ စာသားပါရမည်၊ Bot ရိုက်တဲ့ Command တွေမဖြစ်ရပါ
+    if not event.is_group or not event.text or event.text.startswith(('/', '.', 'မှတ်')):
+        return
+        
+    chat_id = event.chat_id
+    
+    # သက်ဆိုင်ရာ Group အလိုက် Message အရေအတွက်ကို တစ်တိုးခြင်း
+    group_msg_counters[chat_id] = group_msg_counters.get(chat_id, 0) + 1
+    
+    # စာ ၁၀ ကြောင်းပြည့်သွားသောအခါ
+    if group_msg_counters[chat_id] >= 10:
+        group_msg_counters[chat_id] = 0 # Counter ကို ၀ ပြန်လုပ်မယ်
+        
+        # morgan_col ထဲကနေ ကျပန်း စာတစ်ကြောင်း နှိုက်ယူခြင်း
+        pipeline = [{"$sample": {"size": 1}}]
+        async for doc in morgan_col.aggregate(pipeline):
+            morgan_text = doc.get("text")
+            if morgan_text:
+                # တွေ့ရှိပါက Group ထဲသို့ Reply ပြန်ပြီး #morgan hashtag ဖြင့် ပို့ပေးမည်
+                await event.reply(f"{morgan_text}\n\n#morgan")
+                break
 
 # ==========================================
 # 🚀 START SYSTEM
