@@ -12,6 +12,10 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from telethon.tl.types import User
 from html import escape as escape_html
 from telethon import TelegramClient, events, types, Button 
+# --- ဒီကောင်တွေကို 'from openai import OpenAI' ရဲ့ အောက်မှာ သွားပေါင်းပေးပါ ဆရာကြီး ---
+from telethon.tl.functions.channels import GetParticipants, GetAdminLogRequest
+from telethon.tl.types import ChannelParticipantsAdmins, ChannelAdminLogEventsFilter
+
 from telethon.tl.functions.channels import GetParticipantRequest
 from telethon.tl.types import (
     ChannelParticipantAdmin, 
@@ -74,6 +78,8 @@ talker_col = db["talker"]
 welcome_col = db["custom_welcome"] 
 ans_col = db["chatbot_answers"]
 morgan_col = db["morgan_talk"] 
+rank_col = db["rank_col"]
+system_col = db["system_col"]
 # ==========================================
 # 🤖 CLIENT SETUP (SINGLE BOT)
 # ==========================================
@@ -85,6 +91,8 @@ bot_names = []
 # 📊 STATE VARIABLES
 # ==========================================
 sticker_spam_data = {}
+admin_cache = {}          # {chat_id: set(admin_ids)}
+active_rank_messages = {} #
 bot_bully_tasks = {}      
 shoot_tasks = {}          
 tracking_targets = {} 
@@ -120,6 +128,244 @@ async def check_ban_rights(chat_id, user_id):
     permissions = await bot1.get_permissions(chat_id, user_id)
     return permissions.is_admin and permissions.ban_users
 
+async def update_admin_cache(client, chat_id):
+    """Group ရဲ့ Admin စာရင်းကို Cache ထဲမှာ Update လုပ်ပေးမည့် Function"""
+    try:
+        admins = await client(GetParticipants(
+            channel=chat_id,
+            filter=ChannelParticipantsAdmins(),
+            offset=0, limit=100, hash=0
+        ))
+        admin_ids = {p.user_id for p in admins.participants}
+        admin_cache[chat_id] = admin_ids
+        return admin_ids
+    except Exception as e:
+        print(f"Error updating admin cache for {chat_id}: {e}")
+        return admin_cache.get(chat_id, set())
+
+async def get_group_uptime(chat_id):
+    """Group စတင်ခြေရာခံသည့် အချိန်မှစ၍ လက်ရှိအထိ စုစုပေါင်း စက္ကန့်ကို တွက်ချက်ခြင်း"""
+    doc = await system_col.find_one({"chat_id": chat_id, "type": "uptime_tracker"})
+    if not doc:
+        now = datetime.now(pytz.utc)
+        await system_col.insert_one({"chat_id": chat_id, "type": "uptime_tracker", "start_time": now})
+        return 1
+    return (datetime.now(pytz.utc) - doc["start_time"].replace(tzinfo=pytz.utc)).total_seconds()
+
+async def generate_rank_text(chat_id, page=1):
+    """ခေတ်မီဆန်းသစ်ပြီး ဆွဲဆောင်မှုရှိသော Ranking UI ကို ထုတ်လုပ်ပေးမည့် 🌟 Function"""
+    cursor = rank_col.find({"chat_id": chat_id}).sort("total_messages", -1)
+    all_admins = await cursor.to_list(length=100)
+    
+    total_tracked_seconds = await get_group_uptime(chat_id)
+    
+    start_idx = 0 if page == 1 else 5
+    end_idx = 5 if page == 1 else 10
+    display_admins = all_admins[start_idx:end_idx]
+    
+    text = "📊 <b>⚚𝘽𝙤𝘿𝙭 𝙈𝙤𝙧𝙜𝙖𝙣 𝙋𝘼𝙍𝘼𝘿𝙊𝙓 - ᴀᴅᴍɪɴ ʀᴀɴᴋɪɴɢ</b> 📊\n"
+    text += f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    text += f"📅 <b>Batch:</b> {datetime.now(pytz.timezone('Asia/Yangon')).strftime('%Y-%m-%d %I:%M %p')}\n"
+    text += f"━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    
+    medals = {1: "🥇", 2: "🥈", 3: "🥉", 4: "🌟", 5: "👑", 6: "⚡", 7: "✨", 8: "💠", 9: "💎", 10: "🔥"}
+    
+    if not display_admins:
+        text += "<i>Ranking စာရင်း မရှိသေးပါ ခင်ဗျာ။</i>\n"
+    else:
+        for index, admin in enumerate(display_admins, start=start_idx + 1):
+            medal = medals.get(index, "🔹")
+            name = admin.get("first_name", "Unknown Admin")
+            username = f"(@{admin['username']})" if admin.get("username") else ""
+            
+            active_sec = admin.get("active_seconds", 0)
+            act_percentage = min((active_sec / total_tracked_seconds) * 100, 100.0)
+            if act_percentage < 5.0 and admin.get("total_messages", 0) > 0:
+                act_percentage = min(5.0 + (admin.get("total_messages", 0) * 0.1), 99.8)
+
+            text += f"{medal} <b>{index}. {name}</b> {username}\n"
+            text += f" ├─ 💬 <b>Messages:</b> <code>{admin.get('total_messages', 0):,}</code>\n"
+            text += f" ├─ 🗑 <b>Deleted:</b> <code>{admin.get('deleted_messages', 0):,}</code>\n"
+            text += f" └─ ⚡ <b>Presence:</b> <code>{act_percentage:.1f}%</code>\n\n"
+            
+    text += f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    text += f"⏳ <i>ဤစာမျက်နှာသည် ၁ မိနစ်လျှင် တစ်ကြိမ် Auto-update ဖြစ်နေပါမည်။</i>"
+    return text
+
+@bot1.on(events.NewMessage(incoming=True))
+async def admin_activity_tracker(event):
+    """Admin များ၏ မက်ဆေ့ချ်နှင့် အွန်လိုင်းကြာချိန် (Presence) ကို ခြေရာခံမည့် Tracker"""
+    if not event.is_group or not event.sender_id:
+        return
+        
+    chat_id = event.chat_id
+    user_id = event.sender_id
+    
+    if chat_id not in admin_cache:
+        await update_admin_cache(event.client, chat_id)
+        
+    if user_id not in admin_cache.get(chat_id, set()):
+        return
+
+    sender = await event.get_sender()
+    first_name = sender.first_name if hasattr(sender, 'first_name') else "Admin"
+    username = sender.username if hasattr(sender, 'username') else None
+    
+    now = datetime.now(pytz.utc)
+    
+    doc = await rank_col.find_one({"chat_id": chat_id, "user_id": user_id})
+    if not doc:
+        await rank_col.insert_one({
+            "chat_id": chat_id, "user_id": user_id, "first_name": first_name, "username": username,
+            "total_messages": 1, "deleted_messages": 0, "active_seconds": 60, "last_active": now
+        })
+    else:
+        last_active = doc.get("last_active", now).replace(tzinfo=pytz.utc)
+        time_diff = (now - last_active).total_seconds()
+        added_seconds = time_diff if time_diff < 300 else 60
+        
+        await rank_col.update_one(
+            {"chat_id": chat_id, "user_id": user_id},
+            {
+                "$inc": {"total_messages": 1, "active_seconds": int(added_seconds)},
+                "$set": {"first_name": first_name, "username": username, "last_active": now}
+            }
+        )
+
+@bot1.on(events.MessageDeleted())
+async def admin_deletion_tracker(event):
+    """Admin များ သူတစ်ပါး သို့မဟုတ် Bot စာများကို ဖျက်လိုက်ပါက ခြေရာခံမည့် Tracker"""
+    if not event.chat_id:
+        return
+    chat_id = event.chat_id
+    
+    try:
+        await asyncio.sleep(1) 
+        async for log in bot1.iter_admin_log(chat_id, limit=1, filter=ChannelAdminLogEventsFilter(delete=True)):
+            admin_id = log.user_id
+            if chat_id in admin_cache and admin_id in admin_cache[chat_id]:
+                await rank_col.update_one(
+                    {"chat_id": chat_id, "user_id": admin_id},
+                    {"$inc": {"deleted_messages": 1}}
+                )
+            break
+    except Exception as e:
+        print(f"Error tracking deletion log: {e}")
+
+@bot1.on(events.NewMessage(pattern=r'^/rank$'))
+async def show_ranking(event):
+    if not event.is_group: return
+    chat_id = event.chat_id
+    await update_admin_cache(event.client, chat_id)
+    
+    rank_text = await generate_rank_text(chat_id, page=1)
+    buttons = [Button.inline("ဆက်ကြည့်ရန် ➡️", data=f"rank_page_2")]
+    
+    msg = await event.respond(rank_text, parse_mode='html', buttons=buttons)
+    active_rank_messages[msg.id] = {
+        "chat_id": chat_id, "page": 1, "last_action": datetime.now()
+    }
+
+@bot1.on(events.CallbackQuery(pattern=r'^rank_page_(1|2)$'))
+async def on_rank_pagination(event):
+    msg_id = event.message_id
+    page = int(event.pattern_match.group(1))
+    
+    if msg_id in active_rank_messages:
+        active_rank_messages[msg_id]["page"] = page
+        active_rank_messages[msg_id]["last_action"] = datetime.now()
+        
+    chat_id = event.chat_id
+    rank_text = await generate_rank_text(chat_id, page=page)
+    
+    if page == 1:
+        buttons = [Button.inline("ဆက်ကြည့်ရန် ➡️", data="rank_page_2")]
+    else:
+        buttons = [Button.inline("⬅️ ရှေ့သို့ပြန်သွားရန်", data="rank_page_1")]
+        
+    await event.edit(rank_text, parse_mode='html', buttons=buttons)
+
+@bot1.on(events.NewMessage(pattern=r'^/rankadd'))
+async def add_rank_messages(event):
+    if not event.is_group: return
+    chat_id = event.chat_id
+    if event.sender_id not in admin_cache.get(chat_id, set()) and event.sender_id != OWNER_ID:
+        return await event.reply("❌ ဤ Command ကို Admin များနှင့် မော်ဂန်သာ အသုံးပြုနိုင်ပါသည်။")
+        
+    args = event.text.split()
+    target_user_id = None
+    amount = 0
+    
+    if event.is_reply:
+        reply_msg = await event.get_reply_message()
+        target_user_id = reply_msg.sender_id
+        try: amount = int(args[1]) if len(args) > 1 else 0
+        except ValueError: pass
+    else:
+        if len(args) < 3:
+            return await event.reply("💡 <b>အသုံးပြုပုံ:</b>\n<code>/rankadd @username 1000</code>\n<code>/rankadd 12345678 1000</code>\nသို့မဟုတ် User ကို Reply ထောက်ပြီး <code>/rankadd 1000</code>")
+            
+        user_param = args[1]
+        try: amount = int(args[2])
+        except ValueError: return await event.reply("❌ ပေါင်းထည့်မည့် စာစောင်အရေအတွက်မှာ ကိန်းဂဏန်း ဖြစ်ရပါမည်။")
+            
+        if user_param.startswith("@"):
+            username_clean = user_param.replace("@", "")
+            doc = await rank_col.find_one({"chat_id": chat_id, "username": username_clean})
+            if doc: target_user_id = doc["user_id"]
+        elif user_param.isdigit():
+            target_user_id = int(user_param)
+        else:
+            doc = await rank_col.find_one({"chat_id": chat_id, "first_name": {"$regex": user_param, "$options": "i"}})
+            if doc: target_user_id = doc["user_id"]
+
+    if not target_user_id:
+        return await event.reply("❌ ၎င်း Admin အား Database စနစ်ထဲတွင် ရှာမတွေ့ပါ ခင်ဗျာ။")
+
+    res = await rank_col.update_one(
+        {"chat_id": chat_id, "user_id": target_user_id},
+        {"$inc": {"total_messages": amount}}
+    )
+    
+    if res.modified_count > 0:
+        await event.reply(f"✅ သတ်မှတ်ထားသော Admin ၏ စုစုပေါင်း Message ထဲသို့ <b>{amount:,}</b> စောင် အောင်မြင်စွာ ပေါင်းထည့်ပေးပြီးပါပြီ မော်ဂန် 🔥")
+    else:
+        await event.reply("❌ မအောင်မြင်ပါ။ ၎င်းအသုံးပြုသူသည် ဤစနစ်တွင် Admin ဖြစ်နေရပါမည်။")
+
+async def live_rank_updater_loop():
+    """၁ မိနစ်တစ်ခါ လက်ရှိပြထားသော Ranking Message များကို Auto-Update လုပ်ပေးမည့် စက်ဝန်း"""
+    while True:
+        await asyncio.sleep(60)
+        expired_ids = []
+        now = datetime.now()
+        
+        for msg_id, data in list(active_rank_messages.items()):
+            if (now - data["last_action"]).total_seconds() > 900:
+                expired_ids.append(msg_id)
+                continue
+                
+            try:
+                updated_text = await generate_rank_text(data["chat_id"], data["page"])
+                buttons = [Button.inline("ဆက်ကြည့်ရန် ➡️", data="rank_page_2")] if data["page"] == 1 else [Button.inline("⬅️ ရှေ့သို့ပြန်သွားရန်", data="rank_page_1")]
+                await bot1.edit_message(data["chat_id"], msg_id, updated_text, parse_mode='html', buttons=buttons)
+            except Exception: pass
+                
+        for e_id in expired_ids: active_rank_messages.pop(e_id, None)
+
+async def auto_broadcast_rank_loop():
+    """၃ နာရီလျှင် တစ်ကြိမ် Group များထဲသို့ Rank ကို Auto ထုတ်ပြန်ပေးမည့် စက်ဝန်း"""
+    while True:
+        await asyncio.sleep(3 * 3600)
+        try:
+            distinct_chats = await rank_col.distinct("chat_id")
+            for chat_id in distinct_chats:
+                rank_text = await generate_rank_text(chat_id, page=1)
+                buttons = [Button.inline("ဆက်ကြည့်ရန် ➡️", data="rank_page_2")]
+                msg = await bot1.send_message(chat_id, rank_text, parse_mode='html', buttons=buttons)
+                active_rank_messages[msg.id] = {
+                    "chat_id": chat_id, "page": 1, "last_action": datetime.now()
+                }
+        except Exception as e: print(f"Error in auto broadcast loop: {e}")    
 # ====================================================================================
 # 🛡️ SYSTEM COMMANDS & HANDLERS
 # ====================================================================================
@@ -910,8 +1156,8 @@ async def morgan_group_counter_handler(event):
     # သက်ဆိုင်ရာ Group အလိုက် Message အရေအတွက်ကို တစ်တိုးခြင်း
     group_msg_counters[chat_id] = group_msg_counters.get(chat_id, 0) + 1
     
-    # စာ ၁၀ ကြောင်းပြည့်သွားသောအခါ
-    if group_msg_counters[chat_id] >= 4:
+    # စာ ၄ စောင်ပြည့်သွားသောအခါ
+    if group_msg_counters[chat_id] >= 10:
         group_msg_counters[chat_id] = 0 # Counter ကို ၀ ပြန်လုပ်မယ်
         
         # morgan_col ထဲကနေ ကျပန်း စာတစ်ကြောင်း နှိုက်ယူခြင်း
@@ -919,8 +1165,8 @@ async def morgan_group_counter_handler(event):
         async for doc in morgan_col.aggregate(pipeline):
             morgan_text = doc.get("text")
             if morgan_text:
-                # တွေ့ရှိပါက Group ထဲသို့ Reply ပြန်ပြီး #morgan hashtag ဖြင့် ပို့ပေးမည်
-                await event.reply(f"{morgan_text}\n\n#Morgan")
+                # ရိုရိုသေသေ Reply မထောက်တော့ဘဲ Group ထဲကို Normal Message အနေနဲ့ပဲ လှမ်းပို့ပါမယ် ဆရာကြီး
+                await event.client.send_message(chat_id, f"{morgan_text}\n\n#Morgan")
                 break
 
 # ==========================================
