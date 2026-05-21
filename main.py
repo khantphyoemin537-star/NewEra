@@ -1158,7 +1158,7 @@ async def morgan_group_counter_handler(event):
     group_msg_counters[chat_id] = group_msg_counters.get(chat_id, 0) + 1
     
     # စာ ၄ စောင်ပြည့်သွားသောအခါ
-    if group_msg_counters[chat_id] >= 10:
+    if group_msg_counters[chat_id] >= 100:
         group_msg_counters[chat_id] = 0 # Counter ကို ၀ ပြန်လုပ်မယ်
         
         # morgan_col ထဲကနေ ကျပန်း စာတစ်ကြောင်း နှိုက်ယူခြင်း
