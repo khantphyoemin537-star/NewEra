@@ -1568,13 +1568,15 @@ async def start_system():
     await bot1.start(bot_token=MAIN_BOT_TOKEN)
     me_main = await bot1.get_me()
     bot_ids.append(me_main.id)
-    bot_names.append(me_main.first_name)
+    print(f"Main Bot started as @{me_main.username}")
     
-    print(f"✅ BoD Sovereign System Online with 1 Main Bot!")
-    print(f"🤖 Bot Name: {me_main.first_name}")
-    
+    # Connection ကို တစ်ကြိမ်တည်းပဲ တည်ငြိမ်စွာ ဆွဲဆန့်ထားမည်
     await bot1.run_until_disconnected()
 
-if __name__ == "__main__":
-    asyncio.run(start_system())
+if __name__ == '__main__':
+    try:
+        asyncio.run(start_system())
+    except (KeyboardInterrupt, SystemExit):
+        print("System Stopped Safely.")
+
 
