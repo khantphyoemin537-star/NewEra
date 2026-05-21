@@ -510,7 +510,87 @@ async def train_bot(event):
     # သင်ကြားမှု အောင်မြင်ကြောင်း ရိုးရိုးစာသားဖြင့် ပြန်ပြပေးခြင်း
     debug_list = "\n".join([f"• {r}" for r in new_responses])
     await event.reply(f"✨ စကားလုံးအသစ် မှတ်သားမှု အောင်မြင်သည်!\n🔑 Key: {keyphrase}\n📝 ခွဲထုတ်ရရှိသည့် အဖြေများ ({len(new_responses)} ခု):\n{debug_list}\n\n💡 {action_msg}")
+# ====================================================================================
+# 🧹 DISMISS DELETED ADMINS SYSTEM (OWNER & ALLOWED USERS ONLY)
+# ====================================================================================
 
+@bot1.on(events.NewMessage(pattern=r'^/dismiss$'))
+async def dismiss_deleted_admins(event):
+    # Group ထဲမှာပဲ သုံးခွင့်ပေးမယ်
+    if not event.is_group:
+        return await event.reply("❌ ဒီ Command ကို Group များထဲတွင်သာ အသုံးပြုနိုင်ပါသည်။")
+
+    # Command သုံးသူသည် Owner သို့မဟုတ် Allowed User ဖြစ်ရမည်
+    is_allowed = False
+    if event.sender_id == OWNER_ID:
+        is_allowed = True
+    else:
+        # DB ထဲမှာ Allowed User ဟုတ်မဟုတ် စစ်ဆေးခြင်း
+        allowed_user = await allow_col.find_one({"user_id": event.sender_id})
+        if allowed_user:
+            is_allowed = True
+
+    if not is_allowed:
+        return # ခွင့်ပြုချက်မရှိလျှင် ငြိမ်နေမည်
+
+    status_msg = await event.reply("🔍 <i>Admin စာရင်းထဲရှိ Deleted Accounts များကို ရှာဖွေနေပါသည်...</i>", parse_mode='html')
+    
+    chat_id = event.chat_id
+    deleted_admins_count = 0
+    dismissed_count = 0
+    failed_count = 0
+
+    try:
+        # Group ထဲက Admin စာရင်းအားလုံးကို ဆွဲထုတ်ခြင်း
+        async for participant in event.client.iter_participants(chat_id, filter=ChannelParticipantsAdmins):
+            user = participant.user
+            
+            # Creator (Group Owner) ဖြစ်နေလျှင် ကျော်သွားမည် (ဘယ်တော့မှ မဖြုတ်ပါ)
+            if isinstance(participant, ChannelParticipantCreator):
+                continue
+                
+            # အကယ်၍ အကောင့်သည် Deleted Account ဖြစ်နေပါက
+            if user.deleted:
+                deleted_admins_count += 1
+                try:
+                    # Admin အခွင့်အရေးအားလုံးကို အလွတ် (Empty Rights) ပြောင်းလဲပြီး ရာထူးဖြုတ်ခြင်း
+                    await event.client.edit_admin(
+                        chat_id,
+                        user.id,
+                        change_info=False,
+                        post_messages=False,
+                        edit_messages=False,
+                        delete_messages=False,
+                        ban_users=False,
+                        invite_users=False,
+                        pin_messages=False,
+                        add_admins=False,
+                        manage_call=False
+                    )
+                    dismissed_count += 1
+                except Exception as e:
+                    # Bot က ပေးခဲ့တဲ့ Admin မဟုတ်ရင် ရာထူးဖြုတ်ခွင့် မရှိလို့ Fail ဖြစ်ပါလိမ့်မယ်
+                    failed_count += 1
+                    logging.error(f"Failed to dismiss admin {user.id}: {e}")
+
+        # ✨ Result UI Layout ပြသခြင်း
+        if deleted_admins_count == 0:
+            await status_msg.edit("✅ <b>စစ်ဆေးမှု ပြီးဆုံးပါပြီ။</b>\n\nဒီ Group ရဲ့ Admin စာရင်းထဲမှာ Deleted Account တစ်ခုမှ မရှိပါဘူး Chief!", parse_mode='html')
+        else:
+            result_text = (
+                "🧹 <b>⚚ 𝘽𝙤𝘿𝙭  - 𝘼𝘿𝙈𝙄𝙉 𝘾𝙇𝙀𝘼𝙉𝙀𝙍</b> 🧹\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"👤 <b>စစ်ဆေးသူ:</b> {owner_tag() if event.sender_id == OWNER_ID else f'<a href=\"tg://user?id={event.sender_id}\">Authorized Admin</a>'}\n"
+                f"💀 <b>တွေ့ရှိရသော Deleted Admins:</b> <code>{deleted_admins_count} ဦး</code>\n"
+                f"✅ <b>အောင်မြင်စွာ ဖြုတ်ချပြီး:</b> <code>{dismissed_count} ဦး</code>\n"
+                f"❌ <b>ဖြုတ်ချ၍မရသော အရေအတွက်:</b> <code>{failed_count} ဦး</code>\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "💡 <i>မှတ်ချက်: Group Owner က ပေးထားခဲ့တဲ့ Admin တွေကို Bot က ရာထူးချခွင့် မရှိတဲ့အတွက် ဖြုတ်မရတာမျိုး ဖြစ်နိုင်ပါတယ်ဗျာ။ (Group Owner Deleted အကောင့်ကိုတော့ ချန်လှပ်ထားခဲ့ပါတယ်)</i>"
+            )
+            await status_msg.edit(result_text, parse_mode='html')
+
+    except Exception as e:
+        await status_msg.edit(f"❌ <b>Error running dismiss command:</b>\n<code>{e}</code>", parse_mode='html')
 
 # 💬 AUTOMATIC CHAT RESPONDER: လူတွေပြောတာနဲ့ ဆက်စပ်ပြီး ပြန်ဖြေပေးသည့် အပိုင်း
 @bot1.on(events.NewMessage(incoming=True))
