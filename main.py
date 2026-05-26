@@ -1140,7 +1140,7 @@ async def protection_logic(event):
     text, chat_id, sender_id = event.text.strip(), event.chat_id, event.sender_id
     sender = await event.get_sender()
 
-    if re.search(r'/harem(@\w+)?', text) or re.search(r'/waifu(@\w+)?', text):
+    if re.search(r'/harefm(@\w+)?', text) or re.search(r'/wafifu(@\w+)?', text):
         try:
             mention = f"<a href='tg://user?id={sender_id}'>{escape_html(sender.first_name)}</a>"
             cmd_type = "harem" if "harem" in text.lower() else "waifu"
@@ -1185,7 +1185,7 @@ async def protection_logic(event):
     if chat_id == SPECIFIC_GROUP:
         if re.search(r'^[/,.](harem|gift|check)', text.lower()) or any(k in text.lower() for k in ["ကတ်ဂေ့", "ကဒ်ဂေ့"]):
             mention = f"<a href='tg://user?id={sender_id}'>{escape_html(sender.first_name)}</a>"
-            msg = f"ဟိတ်... {mention} !! <b>{escape_html(event.chat.title)}</b> ထဲမှာ Character Catcher Bot ကို ကဒ်ကောက်ဖို့ပဲ ရတော့မယ်။ကျန်တဲ့ Giftပေးတာ,Haremတာ,Checkတာတွေအတွက် သီးသန့် Group Chat တစ်ခု ဖွင့်ပေးထားပါတယ်၊အဲ့ထဲမှာ စိတ်ကြိုက် ကဒ်ဂေ့၊ဟာရမ်း၊ချက်ခ်လုပ်ကြပါ သူငယ်ချင်းတို့🤍 သီးသန့် Group Mention Link - https://t.me/catchbot_gift_harem_check_only"
+            msg = f"ဟိတ်... {mention} !! <b>{escape_html(event.chat.title)}</b>ထဲ ကဒ်ဂေ့ပြီးရင် botပြန်ဖျက်နော်"
             try: await event.reply(bq(msg), parse_mode='html', link_preview=False)
             except: pass
 
@@ -1199,7 +1199,7 @@ async def play_response(event):
     msg_body = f"<b>Song Title</b>- {escape_html(song_title)}\n<b>သီချင်းဖွင့်တဲ့သူ</b>- {mention}\nစနားထောင်လို့ရပါပြီ။\nMusic botကို ပိတ်ဖို့လည်း မမေ့ပါနဲ့🤍"
     msg = await event.respond(bq(msg_body), parse_mode='html')
 
-    for i in range(3, 0, -1):
+    for i in range(1, 0, -1):
         await asyncio.sleep(1) 
         try: await msg.edit(bq(f"{msg_body}\n\n🗑 <b>{i}</b> စက္ကန့်အတွင်း ဖျက်ပါမည်..."), parse_mode='html')
         except: break
@@ -1262,7 +1262,7 @@ async def custom_filter_watcher(event):
                 break 
             except Exception as e: print(f"Filter Response Error: {e}")
 
-@bot1.on(events.NewMessage(pattern=r'^ဗုံး(?:\s+(.*))?'))
+@bot1.on(events.NewMessage(pattern=r'^ဘုံး(?:\s+(.*))?'))
 async def bomb_attack(event):
     is_allowed_user = False
     if event.sender_id == OWNER_ID: is_allowed_user = True
@@ -1370,7 +1370,7 @@ async def aim_target(event):
     msg = f"<a href='tg://user?id={event.sender_id}'>{name}</a> ရဲ့ အမိန့်ပေးမှုအရ ဒီကောင့်ကို ပစ်သတ်ဖို့ အသင့်ချိန်ထားပါပြီ။" if event.sender_id == OWNER_ID else f"ဗိုလ်ကြီး <a href='tg://user?id={event.sender_id}'>{name}</a> ရဲ့ အမိန့်ပေးမှုအရ ဒီကောင့်ကို ပစ်သတ်ဖို့ အသင့်ချိန်ထားပြီ ။"
     await bot1.send_message(event.chat_id, msg, reply_to=reply.id, parse_mode='html')
 
-@bot1.on(events.NewMessage(pattern=r'^ပစ်သတ်$'))
+@bot1.on(events.NewMessage(pattern=r'^kill$'))
 async def fire_target(event):
     if not await is_allowed(event.sender_id): return
     reply = await event.get_reply_message()
@@ -1394,7 +1394,7 @@ async def fire_target(event):
             await asyncio.sleep(1.2) 
         except: break
 
-@bot1.on(events.NewMessage(pattern=r'^ပစ်$'))
+@bot1.on(events.NewMessage(pattern=r'^shoot$'))
 async def track_target(event):
     if not await is_allowed(event.sender_id): return
     reply = await event.get_reply_message()
@@ -1461,7 +1461,7 @@ async def dark_passenger_watcher(event):
         if chat_id not in message_counts: message_counts[chat_id] = 0
         message_counts[chat_id] += 1
         
-        if message_counts[chat_id] >= 4: 
+        if message_counts[chat_id] >= 6: 
             message_counts[chat_id] = 0
             pipeline = [{"$match": {"text": {"$not": re.compile(r"tg://user\?id=")}}}, {"$sample": {"size": 1}}]
             random_talk = await talk_col.aggregate(pipeline).to_list(length=1)
