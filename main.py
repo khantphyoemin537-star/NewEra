@@ -419,14 +419,7 @@ async def welcome_goodbye(event):
                                 [Button.url("Contact Bot Creator", f"tg://user?id={OWNER_ID}")],
                                 [Button.url("Also Join Our Group", "https://t.me/Besties_with_BoD")]
                             ]
-                        )
-        elif event.user_left or event.user_kicked:
-            u = await bot1.get_entity(event.user_id)
-            u_mention = f"<a href='tg://user?id={u.id}'>{escape_html(u.first_name)}</a>"
-            await bot1.send_message(event.chat_id, bq(f"ထွက်သွားလိုက်ပါသေးတယ်.{u_mention}!!"), parse_mode='html')
-
-    except Exception as e:
-        print(f"Welcome/Goodbye Error: {e}")
+                        )       
 # ==========================================
 # 🧠 CHATBOT TRAINING SYSTEM (TELETHON)
 # ==========================================
