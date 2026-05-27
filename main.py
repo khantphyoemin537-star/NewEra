@@ -79,6 +79,13 @@ ans_col = db["chatbot_answers"]
 morgan_col = db["morgan_talk"] 
 rank_col = db["rank_col"]
 system_col = db["system_col"]
+admin_settings_col = db["admin_settings"]
+antiflood_settings_col = db["antiflood_settings"]
+clean_cmd_col = db["clean_command_settings"]
+clean_service_col = db["clean_service_settings"]
+warns_col = db["user_warns"]
+greetings_settings_col = db["greetings_settings"]
+
 # ==========================================
 # 🤖 CLIENT SETUP (SINGLE BOT)
 # ==========================================
@@ -109,6 +116,46 @@ def bq(text): return f"<blockquote><b>{text}</b></blockquote>"
 
 def owner_tag():
     return f"<a href='tg://user?id={OWNER_ID}'>Khant Thu Rain</a>"
+# Global memory for modules tracking
+flood_tracker = {} # {chat_id: {user_id: [timestamps]}}
+welcome_messages_cache = {} # Old welcome messages tracking for cleanwelcome
+
+def parse_duration(time_str):
+    if not time_str: return None
+    match = re.match(r'^(\d+)([smhdw])$', time_str.lower())
+    if not match: return None
+    val = int(match.group(1))
+    unit = match.group(2)
+    if unit == 's': return val
+    if unit == 'm': return val * 60
+    if unit == 'h': return val * 3600
+    if unit == 'd': return val * 86400
+    if unit == 'w': return val * 7 * 86400
+    return None
+
+async def get_target_user(event):
+    """Reply, Username, Mention သို့မဟုတ် User ID မှတစ်ဆင့် User target ကို ရှာဖွေပေးမည့် Helper"""
+    if event.is_reply:
+        reply = await event.get_reply_message()
+        return reply.sender_id, reply
+    args = event.text.split()
+    if len(args) > 1:
+        param = args[1]
+        if param.isdigit():
+            return int(param), None
+        if param.startswith("@") or param.isalpha():
+            try:
+                user = await event.client.get_entity(param)
+                return user.id, None
+            except: pass
+    return None, None
+
+async def send_mod_error(event, text):
+    chat_id = event.chat_id
+    sett = await admin_settings_col.find_one({"chat_id": chat_id})
+    if sett and sett.get("admin_error", "on") == "off":
+        return
+    await event.reply(text)
 
 async def is_allowed(user_id):
     if user_id == OWNER_ID: return True
@@ -367,46 +414,6 @@ async def auto_broadcast_rank_loop():
                     "chat_id": chat_id, "page": 1, "last_action": datetime.now()
                 }
         except Exception as e: print(f"Error in auto broadcast loop: {e}")    
-# ====================================================================================
-# 🛡️ SYSTEM COMMANDS & HANDLERS
-# ====================================================================================
-
-@bot1.on(events.ChatAction)
-async def welcome_goodbye(event):
-    try:
-        chat = await event.get_chat()
-        bot_me = await bot1.get_me()
-        bot_mention = f"<a href='tg://user?id={bot_me.id}'>{escape_html(bot_me.first_name)}</a>"
-        safe_title = escape_html(chat.title)
-        target_ids = event.user_ids or [event.user_id]
-
-        if event.user_added or event.user_joined:
-            if any(uid == bot_me.id for uid in target_ids if uid):
-                await groups_col.update_one({"chat_id": chat.id}, {"$set": {"title": chat.title}}, upsert=True)
-                msg1 = f"ဟိတ် OWNER နဲ့ Admins တို့ မင်းတို့ရဲ့ ဒီ {safe_title} ထဲကို ထည့်သုံးပေးလို့ ကျေးဇူးတင်ပါတယ်! အသုံးလိုကောင်းလိုနိုင်တဲ့ command များယူထားမယ်ဆိုရင် {bot_mention} ရဲ့ Creator {owner_tag()} ရဲ့ Dm (သို့မဟုတ်) @Besties_with_BoD ကိုလာရောက်ပါ!!!"
-                await bot1.send_message(chat.id, bq(msg1), parse_mode='html')
-                try: members = getattr(chat, 'participants_count', 'Unknown')
-                except: members = "Unknown"
-                msg2 = f"မင်္ဂလာပါ {safe_title}က \n{bot_mention}ထည့်သုံးထားပါသေးတယ်\n\nGroup Name - {safe_title}\nGroup ID - <code>{chat.id}</code>\nMembers အရေအတွက် - {members}\nBot Creator - {owner_tag()}"
-                await bot1.send_message(SPECIFIC_GROUP, bq(msg2), parse_mode='html')
-            else:
-                custom_welcome = await welcome_col.find_one({"chat_id": chat.id})
-                for uid in target_ids:
-                    if uid and uid != bot_me.id:
-                        u = await bot1.get_entity(uid)
-                        u_mention = f"<a href='tg://user?id={u.id}'>{escape_html(u.first_name)}</a>"
-                        if custom_welcome and custom_welcome.get("text"):
-                            welcome_text = custom_welcome["text"].replace("{mention}", u_mention).replace("{group}", safe_title)
-                        else:
-                            welcome_text = f"ဟိတ်{u_mention}\n╔═━━━❖━━━═╗\n{safe_title}ကနေ ကြိုဆိုလိုက်ပါတယ်\n╚═━━━❖━━━═╝\n┈┈〔 ⚚ 〕┈┈\n"
-                        media_file = custom_welcome.get("media") if custom_welcome else None
-                        await bot1.send_message(event.chat_id, bq(welcome_text), parse_mode='html', file=media_file, buttons=[
-                            [Button.url("Contact Bot Creator", f"tg://user?id={OWNER_ID}")],
-                            [Button.url("Also Join Our Group", "https://t.me/Besties_with_BoD")]
-                        ])
-    except Exception as e: 
-        print(f"Welcome Error: {e}")
-      
 # ==========================================
 # 🧠 CHATBOT TRAINING SYSTEM (TELETHON)
 # ==========================================
@@ -1537,6 +1544,591 @@ async def morgan_group_counter_handler(event):
                 # ရိုရိုသေသေ Reply မထောက်တော့ဘဲ Group ထဲကို Normal Message အနေနဲ့ပဲ လှမ်းပို့ပါမယ် ဆရာကြီး
                 await event.client.send_message(chat_id, f"{morgan_text}\n\n#Morgan")
                 break
+# ====================================================================================
+# 📄 HELP PANEL SYSTEM (NO BQ WRAPPER)
+# ====================================================================================
+@bot1.on(events.NewMessage(pattern=r'^/help$'))
+async def help_command(event):
+    help_text = (
+        "👑 <b>Sovereign Bot Ultimate Management System Help Panel</b> 👑\n\n"
+        "<b>🤖 1. ADMIN MODULE</b>\n"
+        "• <code>/promote &lt;reply/username/userid&gt;</code> - Promote user to admin\n"
+        "• <code>/demote &lt;reply/username/userid&gt;</code> - Demote an admin\n"
+        "• <code>/adminlist</code> - View all group admins\n"
+        "• <code>/admincache</code> - Force refresh admin status cache\n"
+        "• <code>/anonadmin &lt;yes/no/on/off&gt;</code> - Allow anonymous admins\n"
+        "• <code>/adminerror &lt;yes/no/on/off&gt;</code> - Toggle non-admin errors\n\n"
+        "<b>🌊 2. ANTIFLOOD MODULE</b>\n"
+        "• <code>/flood</code> - View current antiflood settings\n"
+        "• <code>/setflood &lt;number/off&gt;</code> - Set consecutive messages limit\n"
+        "• <code>/setfloodtimer &lt;count&gt; &lt;duration&gt;</code> - Timed flood (eg: /setfloodtimer 10 30s)\n"
+        "• <code>/floodmode &lt;ban/mute/kick/tban/tmute&gt;</code> - Select antiflood action\n"
+        "• <code>/clearflood &lt;on/off&gt;</code> - Auto delete flood messages\n\n"
+        "<b>⛔ 3. BANS & MODERATION MODULE</b>\n"
+        "• <code>/kickme</code> - Kick yourself from the group\n"
+        "• <code>/ban</code> | <code>/dban</code> | <code>/sban</code> - Ban actions\n"
+        "• <code>/tban &lt;user&gt; &lt;duration&gt;</code> - Temp ban (eg: 4m, 3h, 6d, 5w)\n"
+        "• <code>/unban</code> - Unban user\n"
+        "• <code>/mute</code> | <code>/dmute</code> | <code>/smute</code> - Mute actions\n"
+        "• <code>/tmute &lt;user&gt; &lt;duration&gt;</code> - Temp mute\n"
+        "• <code>/unmute</code> - Unmute user\n"
+        "• <code>/kick</code> | <code>/dkick</code> | <code>/skick</code> - Kick actions\n\n"
+        "<b>🧹 4. CLEAN COMMAND MODULE</b>\n"
+        "• <code>/cleancommand &lt;all/admin/user/other&gt;</code> - Clean up commands\n"
+        "• <code>/keepcommand &lt;type&gt;</code> - Stop cleaning specified command type\n"
+        "• <code>/cleancommandtypes</code> - List available command types\n\n"
+        "<b>🧼 5. CLEAN SERVICE MODULE</b>\n"
+        "• <code>/cleanservice &lt;type/on/off&gt;</code> - Delete service logs\n"
+        "• <code>/keepservice &lt;type&gt;</code> - Keep specific service logs\n"
+        "• <code>/cleanservicetypes</code> - View all service message types\n\n"
+        "<b>⚠️ 6. WARNINGS</b>\n"
+        "• <code>/warn &lt;reply/username/userid&gt;</code> - Issue a warning to a user (Max 3 = Ban)\n\n"
+        "<b>👋 7. GREETINGS MODULE</b>\n"
+        "• <code>/welcome &lt;on/off&gt;</code> - Toggle welcome greetings\n"
+        "• <code>/goodbye &lt;on/off&gt;</code> - Toggle goodbye logs\n"
+        "• <code>/setwelcome &lt;text&gt;</code> - Custom welcome text ({mention} and {group} supported)\n"
+        "• <code>/resetwelcome</code> - Reset welcome text to default\n"
+        "• <code>/setgoodbye &lt;text&gt;</code> - Custom goodbye text\n"
+        "• <code>/resetgoodbye</code> - Reset goodbye text\n"
+        "• <code>/cleanwelcome &lt;on/off&gt;</code> - Delete old welcomes after 5 mins"
+    )
+    await event.reply(help_text, parse_mode='html')
+
+# ====================================================================================
+# 🤖 1. ADMIN MODULE
+# ====================================================================================
+@bot1.on(events.NewMessage(pattern=r'^/promote'))
+async def promote_user(event):
+    if not event.is_group: return
+    if not await check_admin(event.chat_id, event.sender_id):
+        return await send_mod_error(event, "❌ ဤ Command ကို အသုံးပြုရန် သင်သည် Admin ဖြစ်ရပါမည်။")
+    
+    uid, _ = await get_target_user(event)
+    if not uid: return await event.reply("❌ Promote လုပ်မည့် အသုံးပြုသူကို Reply ထောက်ပါ သို့မဟုတ် ID/Username ရိုက်ပေးပါ။")
+    
+    try:
+        await event.client.edit_admin(event.chat_id, uid, promote_members=True, invite_users=True, pin_messages=True)
+        await event.reply("✅ အသုံးပြုသူအား Admin အဖြစ် အောင်မြင်စွာ တိုးမြှင့်လိုက်ပါပြီ။")
+        await update_admin_cache(event.client, event.chat_id)
+    except Exception as e:
+        await event.reply(f"❌ ရာထူးတိုးမြှင့်ရန် ခွင့်ပြုချက်မရှိပါ သို့မဟုတ် အမှားအယွင်းရှိနေပါသည်: {e}")
+
+@bot1.on(events.NewMessage(pattern=r'^/demote'))
+async def demote_user(event):
+    if not event.is_group: return
+    if not await check_admin(event.chat_id, event.sender_id):
+        return await send_mod_error(event, "❌ ဤ Command ကို အသုံးပြုရန် သင်သည် Admin ဖြစ်ရပါမည်။")
+    
+    uid, _ = await get_target_user(event)
+    if not uid: return await event.reply("❌ Demote လုပ်မည့် အသုံးပြုသူကို Reply ထောက်ပါ သို့မဟုတ် ID/Username ရိုက်ပေးပါ။")
+    
+    try:
+        await event.client.edit_admin(event.chat_id, uid, change_info=False, post_messages=False, edit_messages=False, delete_messages=False, ban_users=False, invite_users=False, pin_messages=False, add_admins=False)
+        await event.reply("✅ ၎င်း Admin အား ရာထူးမှ အောင်မြင်စွာ ဖြုတ်ချလိုက်ပါပြီ။")
+        await update_admin_cache(event.client, event.chat_id)
+    except Exception as e:
+        await event.reply(f"❌ ရာထူးဖြုတ်ချရန် ခွင့်ပြုချက်မရှိပါ သို့မဟုတ် အမှားအယွင်းရှိနေပါသည်: {e}")
+
+@bot1.on(events.NewMessage(pattern=r'^/adminlist'))
+async def list_group_admins(event):
+    if not event.is_group: return
+    try:
+        msg = "👥 <b>ယခု Group အတွင်းရှိ Admins စာရင်း:</b>\n\n"
+        async for p in event.client.iter_participants(event.chat_id, filter=ChannelParticipantsAdmins):
+            status = "Owner" if isinstance(p, ChannelParticipantCreator) else "Admin"
+            msg += f"• <a href='tg://user?id={p.user.id}'>{escape_html(p.user.first_name)}</a> ({status})\n"
+        await event.reply(msg, parse_mode='html')
+    except Exception as e:
+        await event.reply(f"❌ စာရင်းထုတ်ယူရာတွင် အမှားအယွင်းရှိပါသည်: {e}")
+
+@bot1.on(events.NewMessage(pattern=r'^/admincache'))
+async def refresh_admin_cache(event):
+    if not event.is_group: return
+    await update_admin_cache(event.client, event.chat_id)
+    await event.reply("🔄 Admin status cache ကို Force-refresh လုပ်ပြီးပါပြီ Chief!")
+
+@bot1.on(events.NewMessage(pattern=r'^/anonadmin\s+(yes|no|on|off)$'))
+async def toggle_anon_admin(event):
+    if not event.is_group: return
+    if not await check_admin(event.chat_id, event.sender_id): return
+    val = event.pattern_match.group(1)
+    status = "on" if val in ["yes", "on"] else "off"
+    await admin_settings_col.update_one({"chat_id": event.chat_id}, {"$set": {"anon_admin": status}}, upsert=True)
+    await event.reply(f"⚙️ Anonymous Admin စနစ်ကို <b>{status.upper()}</b> လိုက်ပါပြီ။", parse_mode='html')
+
+@bot1.on(events.NewMessage(pattern=r'^/adminerror\s+(yes|no|on|off)$'))
+async def toggle_admin_error(event):
+    if not event.is_group: return
+    if not await check_admin(event.chat_id, event.sender_id): return
+    val = event.pattern_match.group(1)
+    status = "on" if val in ["yes", "on"] else "off"
+    await admin_settings_col.update_one({"chat_id": event.chat_id}, {"$set": {"admin_error": status}}, upsert=True)
+    await event.reply(f"⚙️ Admin Error Alerts စနစ်ကို <b>{status.upper()}</b> လိုက်ပါပြီ။", parse_mode='html')
+
+# ====================================================================================
+# 🌊 2. ANTIFLOOD MODULE & MECHANISM
+# ====================================================================================
+@bot1.on(events.NewMessage(pattern=r'^/flood$'))
+async def show_flood_settings(event):
+    if not event.is_group: return
+    f_sett = await antiflood_settings_col.find_one({"chat_id": event.chat_id}) or {}
+    limit = f_sett.get("limit", "off")
+    mode = f_sett.get("mode", "mute")
+    clear = f_sett.get("clear", "off")
+    timer_count = f_sett.get("timer_count", "off")
+    timer_dur = f_sett.get("timer_dur", "")
+    
+    msg = (
+        "🌊 <b>လက်ရှိ Antiflood ဆတင်များ:</b>\n\n"
+        f"• Consecutive Limit: <code>{limit}</code>\n"
+        f"• Timed Flood: <code>{timer_count} messages in {timer_dur}</code>\n"
+        f"• Action Mode: <code>{mode}</code>\n"
+        f"• Clear Flood Messages: <code>{clear}</code>"
+    )
+    await event.reply(msg, parse_mode='html')
+
+@bot1.on(events.NewMessage(pattern=r'^/setflood\s+(\d+|off|no)$'))
+async def set_flood_consecutive(event):
+    if not event.is_group: return
+    if not await check_admin(event.chat_id, event.sender_id): return
+    val = event.pattern_match.group(1)
+    limit = "off" if val in ["off", "no"] else int(val)
+    await antiflood_settings_col.update_one({"chat_id": event.chat_id}, {"$set": {"limit": limit}}, upsert=True)
+    await event.reply(f"✅ Antiflood consecutive limit ကို <code>{limit}</code> သို့ ပြောင်းလဲသတ်မှတ်လိုက်ပါပြီ။", parse_mode='html')
+
+@bot1.on(events.NewMessage(pattern=r'^/setfloodtimer\s+(\d+|off|no)(?:\s+(\d+[smhdw]))?$'))
+async def set_flood_timer(event):
+    if not event.is_group: return
+    if not await check_admin(event.chat_id, event.sender_id): return
+    args = event.text.split()
+    if args[1] in ["off", "no"]:
+        await antiflood_settings_col.update_one({"chat_id": event.chat_id}, {"$set": {"timer_count": "off", "timer_dur": ""}}, upsert=True)
+        return await event.reply("✅ Timed antiflood ကို ပိတ်လိုက်ပါပြီ။")
+    
+    if len(args) < 3: return await event.reply("💡 Format: <code>/setfloodtimer 10 30s</code>", parse_mode='html')
+    count = int(args[1])
+    duration_str = args[2]
+    await antiflood_settings_col.update_one({"chat_id": event.chat_id}, {"$set": {"timer_count": count, "timer_dur": duration_str}}, upsert=True)
+    await event.reply(f"✅ Timed Antiflood ကို {duration_str} အတွင်း {count} စောင် ပုံစံဖြင့် သတ်မှတ်လိုက်ပါပြီ။")
+
+@bot1.on(events.NewMessage(pattern=r'^/floodmode\s+(ban|mute|kick|tban|tmute)(?:\s+(\d+[smhdw]))?$'))
+async def set_flood_mode(event):
+    if not event.is_group: return
+    if not await check_admin(event.chat_id, event.sender_id): return
+    mode = event.pattern_match.group(1)
+    dur = event.pattern_match.group(2) or ""
+    await antiflood_settings_col.update_one({"chat_id": event.chat_id}, {"$set": {"mode": mode, "mode_dur": dur}}, upsert=True)
+    await event.reply(f"✅ Flood ဖြစ်ပေါ်ပါက အရေးယူမည့် ပုံစံကို <code>{mode} {dur}</code> အဖြစ် ရွေးချယ်လိုက်ပါပြီ။", parse_mode='html')
+
+@bot1.on(events.NewMessage(pattern=r'^/clearflood\s+(yes|no|on|off)$'))
+async def set_clear_flood(event):
+    if not event.is_group: return
+    if not await check_admin(event.chat_id, event.sender_id): return
+    val = event.pattern_match.group(1)
+    status = "on" if val in ["yes", "on"] else "off"
+    await antiflood_settings_col.update_one({"chat_id": event.chat_id}, {"$set": {"clear": status}}, upsert=True)
+    await event.reply(f"✅ Flood ဖြစ်စေသော စာများကို ဖျက်ပစ်မည့်စနစ် <b>{status.upper()}</b> ပါပြီ။", parse_mode='html')
+
+# AntiFlood Engine Trigger
+@bot1.on(events.NewMessage(incoming=True))
+async def antiflood_engine(event):
+    if not event.is_group or not event.sender_id: return
+    if await check_admin(event.chat_id, event.sender_id): return
+    
+    chat_id = event.chat_id
+    user_id = event.sender_id
+    now = datetime.now()
+    
+    f_sett = await antiflood_settings_col.find_one({"chat_id": chat_id}) or {}
+    limit = f_sett.get("limit", "off")
+    timer_count = f_sett.get("timer_count", "off")
+    timer_dur = f_sett.get("timer_dur", "")
+    mode = f_sett.get("mode", "mute")
+    clear = f_sett.get("clear", "off")
+    
+    triggered = False
+    
+    if chat_id not in flood_tracker: flood_tracker[chat_id] = {}
+    if user_id not in flood_tracker[chat_id]: flood_tracker[chat_id][user_id] = []
+    
+    flood_tracker[chat_id][user_id].append(now)
+    user_logs = flood_tracker[chat_id][user_id]
+    
+    # 1. Consecutive limit trigger logic
+    if isinstance(limit, int) and len(user_logs) >= limit:
+        triggered = True
+        
+    # 2. Timed flood trigger logic
+    elif isinstance(timer_count, int) and timer_dur:
+        seconds = parse_duration(timer_dur)
+        if seconds:
+            cutoff = now - timedelta(seconds=seconds)
+            valid_logs = [t for t in user_logs if t > cutoff]
+            flood_tracker[chat_id][user_id] = valid_logs
+            if len(valid_logs) >= timer_count:
+                triggered = True
+
+    if triggered:
+        flood_tracker[chat_id][user_id] = [] # Reset tracker
+        try:
+            dur_seconds = parse_duration(f_sett.get("mode_dur", ""))
+            until = datetime.now() + timedelta(seconds=dur_seconds) if dur_seconds else None
+            
+            if mode == "mute":
+                await event.client.edit_permissions(chat_id, user_id, send_messages=False)
+                await event.respond("🌊 <b>Antiflood Triggered:</b> စာတွေ ဆက်တိုက်ပို့ပြီး Flood ထိုင်လို့ အဆိုပါ အသုံးပြုသူအား Mute လုပ်လိုက်ပါပြီ။")
+            elif mode == "tmute" and until:
+                await event.client.edit_permissions(chat_id, user_id, send_messages=False, until_date=until)
+                await event.respond(f"🌊 <b>Antiflood Triggered:</b> အသုံးပြုသူအား {f_sett.get('mode_dur')} အကြာ ယာယီ Mute လိုက်ပါပြီ။")
+            elif mode == "ban":
+                await event.client.edit_permissions(chat_id, user_id, view_messages=False)
+                await event.respond("🌊 <b>Antiflood Triggered:</b> အသုံးပြုသူအား Group မှ Ban လိုက်ပါပြီ။")
+            elif mode == "tban" and until:
+                await event.client.edit_permissions(chat_id, user_id, view_messages=False, until_date=until)
+                await event.respond(f"🌊 <b>Antiflood Triggered:</b> အသုံးပြုသူအား {f_sett.get('mode_dur')} အကြာ ယာယီ Ban လိုက်ပါပြီ။")
+            elif mode == "kick":
+                await event.client.kick_participant(chat_id, user_id)
+                await event.respond("🌊 <b>Antiflood Triggered:</b> အသုံးပြုသူအား Group မှ Kick ထုတ်လိုက်ပါပြီ။")
+                
+            if clear == "on":
+                # Delete messages (last 5 messages)
+                async for m in event.client.iter_messages(chat_id, from_user=user_id, limit=5):
+                    await m.delete()
+        except Exception as e:
+            print(f"Antiflood Enforcement Error: {e}")
+
+# ====================================================================================
+# ⛔ 3. BANS & MODERATION MODULE
+# ====================================================================================
+@bot1.on(events.NewMessage(pattern=r'^/kickme$'))
+async def kick_me(event):
+    if not event.is_group: return
+    try:
+        await event.reply("👋 ကောင်းပြီလေ... မင်းဆန္ဒအတိုင်း ထွက်သွားခွင့်ပြုလိုက်ပါတယ်။")
+        await event.client.kick_participant(event.chat_id, event.sender_id)
+    except Exception as e:
+        await event.reply(f"❌ အမှားအယွင်းရှိပါသည်: {e}")
+
+@bot1.on(events.NewMessage(pattern=r'^/(ban|dban|sban|kick|dkick|skick|mute|dmute|smute|unban|unmute)'))
+async def generic_moderation(event):
+    if not event.is_group: return
+    cmd = event.text.split()[0].replace("/", "")
+    
+    if not await check_admin(event.chat_id, event.sender_id):
+        return await send_mod_error(event, "❌ ဤ Command ကို သုံးရန် သင်သည် Admin ဖြစ်ရပါမည်။")
+        
+    uid, reply_msg = await get_target_user(event)
+    if not uid: return await event.reply("❌ ရည်ညွှန်းမည့် အသုံးပြုသူကို Reply ထောက်ပါ သို့မဟုတ် ID/Username ရိုက်ပေးပါ။")
+    if uid == OWNER_ID: return await event.reply("❌ Owner ကို အရေးယူပိုင်ခွင့် မရှိပါ Chief!")
+
+    try:
+        if "ban" in cmd:
+            await event.client.edit_permissions(event.chat_id, uid, view_messages=False)
+            await event.respond(f"⛔ အသုံးပြုသူ <code>{uid}</code> အား အောင်မြင်စွာ Ban လိုက်ပါပြီ။", parse_mode='html')
+        elif "mute" in cmd and cmd != "unmute":
+            await event.client.edit_permissions(event.chat_id, uid, send_messages=False)
+            await event.respond(f"🔇 အသုံးပြုသူ <code>{uid}</code> အား အောင်မြင်စွာ Mute လိုက်ပါပြီ။", parse_mode='html')
+        elif "kick" in cmd:
+            await event.client.kick_participant(event.chat_id, uid)
+            await event.respond(f"👞 အသုံးပြုသူ <code>{uid}</code> အား Group မှ Kick လိုက်ပါပြီ။", parse_mode='html')
+        elif cmd == "unban":
+            await event.client.edit_permissions(event.chat_id, uid, view_messages=True, send_messages=True, send_media=True)
+            await event.respond("✅ အသုံးပြုသူအား ပြန်လည် Unban ပေးလိုက်ပါပြီ။")
+        elif cmd == "unmute":
+            await event.client.edit_permissions(event.chat_id, uid, send_messages=True)
+            await event.respond("✅ အသုံးပြုသူအား ပြန်လည် Unmute ပေးလိုက်ပါပြီ။")
+
+        # Handle sub-types (Delete features)
+        if cmd.startswith("d") and reply_msg:
+            await reply_msg.delete()
+        if cmd.startswith("s"):
+            await event.delete()
+            if reply_msg and cmd == "sban": await reply_msg.delete()
+    except Exception as e:
+        await event.reply(f"❌ လုပ်ဆောင်ချက် မအောင်မြင်ပါ: {e}")
+
+@bot1.on(events.NewMessage(pattern=r'^/(tban|tmute)\s+(\S+)\s+(\d+[smhdw])'))
+async def temporary_moderation(event):
+    if not event.is_group: return
+    if not await check_admin(event.chat_id, event.sender_id): return
+    
+    cmd = event.pattern_match.group(1)
+    dur_str = event.pattern_match.group(3)
+    seconds = parse_duration(dur_str)
+    if not seconds: return await event.reply("❌ မှားယွင်းသော ဒေတာအချိန် သတ်မှတ်ချက် ဖြစ်ပါသည်။ (ဥပမာ: 4m, 3h, 2d)")
+    
+    uid, _ = await get_target_user(event)
+    if not uid: return
+    until = datetime.now() + timedelta(seconds=seconds)
+    
+    try:
+        if cmd == "tban":
+            await event.client.edit_permissions(event.chat_id, uid, view_messages=False, until_date=until)
+            await event.respond(f"⏳ အသုံးပြုသူအား {dur_str} အကြာ ယာယီ <b>BAN</b> လိုက်ပါပြီ။", parse_mode='html')
+        elif cmd == "tmute":
+            await event.client.edit_permissions(event.chat_id, uid, send_messages=False, until_date=until)
+            await event.respond(f"⏳ အသုံးပြုသူအား {dur_str} အကြာ ယာယီ <b>MUTE</b> လိုက်ပါပြီ။", parse_mode='html')
+    except Exception as e:
+        await event.reply(f"❌ ယာယီအရေးယူမှု မအောင်မြင်ပါ: {e}")
+
+# ====================================================================================
+# 🧹 4. CLEAN COMMAND MODULE & ENGINE
+# ====================================================================================
+@bot1.on(events.NewMessage(pattern=r'^/cleancommandtypes$'))
+async def list_clean_cmd_types(event):
+    await event.reply("🧹 <b>Available clean command types:</b>\n• <code>all</code>\n• <code>admin</code>\n• <code>user</code>\n• <code>other</code>", parse_mode='html')
+
+@bot1.on(events.NewMessage(pattern=r'^/cleancommand\s+(all|admin|user|other)$'))
+async def set_clean_command(event):
+    if not event.is_group: return
+    if not await check_admin(event.chat_id, event.sender_id): return
+    ctype = event.pattern_match.group(1)
+    await clean_cmd_col.update_one({"chat_id": event.chat_id}, {"$set": {ctype: True}}, upsert=True)
+    await event.reply(f"🧹 Command သန့်ရှင်းရေးစနစ်ထဲတွင် <code>{ctype}</code> ကို စတင်ဖျက်ခိုင်းလိုက်ပါပြီ။", parse_mode='html')
+
+@bot1.on(events.NewMessage(pattern=r'^/keepcommand\s+(all|admin|user|other)$'))
+async def set_keep_command(event):
+    if not event.is_group: return
+    if not await check_admin(event.chat_id, event.sender_id): return
+    ctype = event.pattern_match.group(1)
+    await clean_cmd_col.update_one({"chat_id": event.chat_id}, {"$set": {ctype: False}}, upsert=True)
+    await event.reply(f"✅ <code>{ctype}</code> commands များကို မဖျက်ဘဲ ချန်ထားရန် ဆုံးဖြတ်လိုက်ပါပြီ။", parse_mode='html')
+
+# Clean Command Engine Trigger
+@bot1.on(events.NewMessage(incoming=True))
+async def clean_command_engine(event):
+    if not event.is_group or not event.text.startswith("/"): return
+    c_sett = await clean_cmd_col.find_one({"chat_id": event.chat_id}) or {}
+    
+    is_adm = await check_admin(event.chat_id, event.sender_id)
+    cmd_base = event.text.split()[0]
+    
+    should_delete = False
+    if c_sett.get("all"): should_delete = True
+    elif is_adm and c_sett.get("admin"): should_delete = True
+    elif not is_adm and c_sett.get("user"): should_delete = True
+    
+    if should_delete:
+        try: await event.delete()
+        except: pass
+
+# ====================================================================================
+# 🧼 5. CLEAN SERVICE MODULE & ENGINE
+# ====================================================================================
+@bot1.on(events.NewMessage(pattern=r'^/cleanservicetypes$'))
+async def clean_service_types(event):
+    msg = (
+        "🧼 <b>Clean Service အမျိုးအစားများ:</b>\n"
+        "• <code>all</code> - Service မက်ဆေ့ချ် အားလုံး\n"
+        "• <code>join</code> - လူအသစ်ဝင်ရောက်ခြင်း မှတ်တမ်း\n"
+        "• <code>leave</code> - ထွက်ခွာသွားခြင်း မှတ်တမ်း\n"
+        "• <code>pin</code> - Pin ထိုးခြင်း စာတမ်းများ\n"
+        "• <code>title</code> - ခေါင်းစဉ် ပြောင်းလဲခြင်း ဆိုင်ရာများ"
+    )
+    await event.reply(msg, parse_mode='html')
+
+@bot1.on(events.NewMessage(pattern=r'^/cleanservice\s+(\S+)$'))
+async def set_clean_service(event):
+    if not event.is_group: return
+    if not await check_admin(event.chat_id, event.sender_id): return
+    stype = event.pattern_match.group(1)
+    if stype in ["yes", "on", "all"]:
+        await clean_service_col.update_one({"chat_id": event.chat_id}, {"$set": {"all": True, "join": True, "leave": True, "pin": True, "title": True}}, upsert=True)
+    else:
+        await clean_service_col.update_one({"chat_id": event.chat_id}, {"$set": {stype: True}}, upsert=True)
+    await event.reply(f"🧼 Service Message မားထဲက <code>{stype}</code> ကို Auto-delete လုပ်ခိုင်းလိုက်ပါပြီ။", parse_mode='html')
+
+@bot1.on(events.NewMessage(pattern=r'^/(keepservice|nocleanservice)\s+(\S+)$'))
+async def set_keep_service(event):
+    if not event.is_group: return
+    if not await check_admin(event.chat_id, event.sender_id): return
+    stype = event.pattern_match.group(2)
+    if stype == "all":
+        await clean_service_col.update_one({"chat_id": event.chat_id}, {"$set": {"all": False, "join": False, "leave": False, "pin": False, "title": False}}, upsert=True)
+    else:
+        await clean_service_col.update_one({"chat_id": event.chat_id}, {"$set": {stype: False}}, upsert=True)
+    await event.reply(f"✅ Service Message <code>{stype}</code> အား မဖျက်ဘဲ ဆက်ထားပါမည်။", parse_mode='html')
+
+# ====================================================================================
+# ⚠️ 6. WARNINGS SYSTEM
+# ====================================================================================
+@bot1.on(events.NewMessage(pattern=r'^/warn'))
+async def warn_user(event):
+    if not event.is_group: return
+    if not await check_admin(event.chat_id, event.sender_id):
+        return await send_mod_error(event, "❌ ဤ Command ကို သုံးရန် သင်သည် Admin ဖြစ်ရပါမည်။")
+        
+    uid, _ = await get_target_user(event)
+    if not uid: return await event.reply("❌ သတိပေးချက်ထုတ်ပြန်မည့် အသုံးပြုသူကို ရည်ညွှန်းပေးပါ။")
+    if uid == OWNER_ID: return await event.reply("❌ Owner ကို Warning ပေးလို့ မရပါဗျာ။")
+    
+    # Reason parsing
+    reason = "သတ်မှတ်စည်းကမ်းချက်များကို ဖောက်ဖျက်ခြင်း။"
+    args = event.text.split()
+    if len(args) > 2: reason = " ".join(args[2:])
+    elif event.is_reply and len(args) > 1: reason = " ".join(args[1:])
+
+    doc = await warns_col.find_one_and_update(
+        {"chat_id": event.chat_id, "user_id": uid},
+        {"$inc": {"warns": 1}},
+        upsert=True, return_document=True
+    )
+    
+    count = doc["warns"]
+    if count >= 3:
+        await event.client.edit_permissions(event.chat_id, uid, view_messages=False)
+        await warns_col.delete_many({"chat_id": event.chat_id, "user_id": uid})
+        await event.respond(f"⛔ အသုံးပြုသူ <code>{uid}</code> သည် သတိပေးချက် (၃) ကြိမ်ပြည့်သွားသဖြင့် Group မှ <b>BAN</b> လိုက်ပါပြီ။", parse_mode='html')
+    else:
+        await event.respond(f"⚠️ <b>သတိပေးချက် ထုတ်ပြန်ခြင်း!</b>\n\n• အသုံးပြုသူ: <code>{uid}</code>\n• အကြောင်းပြချက်: {reason}\n• သတိပေးချက် စုစုပေါင်း: <code>{count}/3</code> ကြိမ်မြောက်။", parse_mode='html')
+
+# ====================================================================================
+# 👋 7. GREETINGS MODULE & UPDATED WELCOME ENGINE (NO BQ WRAPPER)
+# ====================================================================================
+@bot1.on(events.NewMessage(pattern=r'^/welcome\s+(yes|no|on|off)$'))
+async def toggle_welcome(event):
+    if not event.is_group: return
+    if not await check_admin(event.chat_id, event.sender_id): return
+    val = event.pattern_match.group(1)
+    status = "on" if val in ["yes", "on"] else "off"
+    await greetings_settings_col.update_one({"chat_id": event.chat_id}, {"$set": {"welcome_status": status}}, upsert=True)
+    await event.reply(f"👋 Welcome နှုတ်ဆက်ခြင်းစနစ်ကို <b>{status.upper()}</b> လိုက်ပါပြီ။", parse_mode='html')
+
+@bot1.on(events.NewMessage(pattern=r'^/goodbye\s+(yes|no|on|off)$'))
+async def toggle_goodbye(event):
+    if not event.is_group: return
+    if not await check_admin(event.chat_id, event.sender_id): return
+    val = event.pattern_match.group(1)
+    status = "on" if val in ["yes", "on"] else "off"
+    await greetings_settings_col.update_one({"chat_id": event.chat_id}, {"$set": {"goodbye_status": status}}, upsert=True)
+    await event.reply(f"👋 Goodbye နှုတ်ဆက်ခြင်းစနစ်ကို <b>{status.upper()}</b> လိုက်ပါပြီ။", parse_mode='html')
+
+@bot1.on(events.NewMessage(pattern=r'^/setwelcome\s+(.*)$'))
+async def set_welcome_msg(event):
+    if not event.is_group: return
+    if not await check_admin(event.chat_id, event.sender_id): return
+    text = event.pattern_match.group(1)
+    await welcome_col.update_one({"chat_id": event.chat_id}, {"$set": {"text": text}}, upsert=True)
+    await event.reply("✅ Custom Welcome စာသားကို အောင်မြင်စွာ ပြောင်းလဲလိုက်ပါပြီ။")
+
+@bot1.on(events.NewMessage(pattern=r'^/resetwelcome$'))
+async def reset_welcome_msg(event):
+    if not event.is_group: return
+    if not await check_admin(event.chat_id, event.sender_id): return
+    await welcome_col.update_one({"chat_id": event.chat_id}, {"$set": {"text": None}}, upsert=True)
+    await event.reply("✅ Welcome စာသားကို Default ပုံစံအတိုင်း ပြန်လည်ပြင်ဆင်လိုက်ပါပြီ။")
+
+@bot1.on(events.NewMessage(pattern=r'^/setgoodbye\s+(.*)$'))
+async def set_goodbye_msg(event):
+    if not event.is_group: return
+    if not await check_admin(event.chat_id, event.sender_id): return
+    text = event.pattern_match.group(1)
+    await greetings_settings_col.update_one({"chat_id": event.chat_id}, {"$set": {"goodbye_text": text}}, upsert=True)
+    await event.reply("✅ Custom Goodbye စာသားကို အောင်မြင်စွာ ပြောင်းလဲလိုက်ပါပြီ။")
+
+@bot1.on(events.NewMessage(pattern=r'^/resetgoodbye$'))
+async def reset_goodbye_msg(event):
+    if not event.is_group: return
+    if not await check_admin(event.chat_id, event.sender_id): return
+    await greetings_settings_col.update_one({"chat_id": event.chat_id}, {"$set": {"goodbye_text": None}}, upsert=True)
+    await event.reply("✅ Goodbye စာသားကို Default ပုံစံအတိုင်း ပြန်လည်ပြင်ဆင်လိုက်ပါပြီ။")
+
+@bot1.on(events.NewMessage(pattern=r'^/cleanwelcome\s+(yes|no|on|off)$'))
+async def set_clean_welcome(event):
+    if not event.is_group: return
+    if not await check_admin(event.chat_id, event.sender_id): return
+    val = event.pattern_match.group(1)
+    status = "on" if val in ["yes", "on"] else "off"
+    await greetings_settings_col.update_one({"chat_id": event.chat_id}, {"$set": {"clean_welcome": status}}, upsert=True)
+    await event.reply(f"✅ Clean Welcome စနစ်ကို <b>{status.upper()}</b> လိုက်ပါပြီ။", parse_mode='html')
+
+# Integrated Actions Handler (Replaces and upgrades welcome_goodbye & clean service logs)
+@bot1.on(events.ChatAction)
+async def system_chat_actions_handler(event):
+    chat_id = event.chat_id
+    s_sett = await clean_service_col.find_one({"chat_id": chat_id}) or {}
+    g_sett = await greetings_settings_col.find_one({"chat_id": chat_id}) or {}
+    
+    # 🧼 Clean Service Action interception logic
+    if event.user_joined or event.user_added:
+        if s_sett.get("join") or s_sett.get("all"):
+            try: return await event.delete()
+            except: pass
+    if event.user_left or event.user_kicked:
+        if s_sett.get("leave") or s_sett.get("all"):
+            try: return await event.delete()
+            except: pass
+    if event.new_pin:
+        if s_sett.get("pin") or s_sett.get("all"):
+            try: return await event.delete()
+            except: pass
+    if event.new_title:
+        if s_sett.get("title") or s_sett.get("all"):
+            try: return await event.delete()
+            except: pass
+
+    # 👋 Welcome Engine Execution
+    if event.user_joined or event.user_added:
+        if g_sett.get("welcome_status", "on") == "off": return
+        chat = await event.get_chat()
+        bot_me = await bot1.get_me()
+        safe_title = escape_html(chat.title)
+        target_ids = event.user_ids or [event.user_id]
+        
+        if any(uid == bot_me.id for uid in target_ids if uid):
+            # Bot joined group logic
+            await groups_col.update_one({"chat_id": chat.id}, {"$set": {"title": chat.title}}, upsert=True)
+            msg1 = f"ဟိတ် OWNER နဲ့ Admins တို့ မင်းတို့ရဲ့ ဒီ {safe_title} ထဲကို ထည့်သုံးပေးလို့ ကျေးဇူးတင်ပါတယ်! အသုံးလိုကောင်းလိုနိုင်တဲ့ command များယူထားမယ်ဆိုရင် @Besties_with_BoD ကိုလာရောက်ပါ!!!"
+            await bot1.send_message(chat.id, msg1, parse_mode='html')
+            return
+
+        # Regular user join welcome text
+        custom_welcome = await welcome_col.find_one({"chat_id": chat.id})
+        for uid in target_ids:
+            if uid and uid != bot_me.id:
+                try:
+                    u = await bot1.get_entity(uid)
+                    u_mention = f"<a href='tg://user?id={u.id}'>{escape_html(u.first_name)}</a>"
+                    if custom_welcome and custom_welcome.get("text"):
+                        w_text = custom_welcome["text"].replace("{mention}", u_mention).replace("{group}", safe_title)
+                    else:
+                        w_text = f"ဟိတ် {u_mention}\n╔═━━━❖━━━═╗\n{safe_title} ကနေ လှိုက်လှဲစွာ ကြိုဆိုလိုက်ပါတယ်\n╚═━━━❖━━━═╝\n┈┈〔 ⚚ 〕┈┈\n"
+                    
+                    media_file = custom_welcome.get("media") if custom_welcome else None
+                    
+                    # Clean welcome handling (Delete old one before sending new one)
+                    if g_sett.get("clean_welcome") == "on" and chat_id in welcome_messages_cache:
+                        try: await bot1.delete_messages(chat_id, welcome_messages_cache[chat_id])
+                        except: pass
+                        
+                    sent_msg = await bot1.send_message(
+                        chat_id, w_text, parse_mode='html', file=media_file,
+                        buttons=[
+                            [Button.url("Contact Bot Creator", f"tg://user?id={OWNER_ID}")],
+                            [Button.url("Also Join Our Group", "https://t.me/Besties_with_BoD")]
+                        ]
+                    )
+                    if g_sett.get("clean_welcome") == "on":
+                        welcome_messages_cache[chat_id] = sent_msg.id
+                except Exception as e:
+                    print(f"Welcome delivery error: {e}")
+
+    # 👋 Goodbye Engine Execution
+    if event.user_left or event.user_kicked:
+        if g_sett.get("goodbye_status", "on") == "off": return
+        chat = await event.get_chat()
+        safe_title = escape_html(chat.title)
+        
+        try:
+            u = await bot1.get_entity(event.user_id)
+            u_mention = f"<a href='tg://user?id={u.id}'>{escape_html(u.first_name)}</a>"
+            g_text = g_sett.get("goodbye_text")
+            if g_text:
+                goodbye_msg = g_text.replace("{mention}", u_mention).replace("{group}", safe_title)
+            else:
+                goodbye_msg = f"နှုတ်ဆက်ပါတယ် {u_mention}၊ နောက်လည်း {safe_title} သို့ ပြန်လာခဲ့ဖို့ မျှော်လင့်ပါတယ်ဗျာ။"
+            await bot1.send_message(chat_id, goodbye_msg, parse_mode='html')
+        except: pass
 
 # ==========================================
 # 🚀 START SYSTEM
