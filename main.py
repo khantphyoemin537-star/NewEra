@@ -385,7 +385,6 @@ async def welcome_goodbye(event):
                 await groups_col.update_one({"chat_id": chat.id}, {"$set": {"title": chat.title}}, upsert=True)
                 msg1 = f"ဟိတ် OWNER နဲ့ Admins တို့ မင်းတို့ရဲ့ ဒီ {safe_title} ထဲကို ထည့်သုံးပေးလို့ ကျေးဇူးတင်ပါတယ်! အသုံးလိုကောင်းလိုနိုင်တဲ့ command များယူထားမယ်ဆိုရင် {bot_mention} ရဲ့ Creator {owner_tag()} ရဲ့ Dm (သို့မဟုတ်) @Besties_with_BoD ကိုလာရောက်ပါ!!!"
                 await bot1.send_message(chat.id, bq(msg1), parse_mode='html')
-                
                 try: members = getattr(chat, 'participants_count', 'Unknown')
                 except: members = "Unknown"
                 msg2 = f"မင်္ဂလာပါ {safe_title}က \n{bot_mention}ထည့်သုံးထားပါသေးတယ်\n\nGroup Name - {safe_title}\nGroup ID - <code>{chat.id}</code>\nMembers အရေအတွက် - {members}\nBot Creator - {owner_tag()}"
@@ -396,30 +395,18 @@ async def welcome_goodbye(event):
                     if uid and uid != bot_me.id:
                         u = await bot1.get_entity(uid)
                         u_mention = f"<a href='tg://user?id={u.id}'>{escape_html(u.first_name)}</a>"
-                        
                         if custom_welcome and custom_welcome.get("text"):
-                            welcome_text = custom_welcome["text"]
-                            welcome_text = welcome_text.replace("{mention}", u_mention).replace("{group}", safe_title)
+                            welcome_text = custom_welcome["text"].replace("{mention}", u_mention).replace("{group}", safe_title)
                         else:
-                            welcome_text = (
-                                f"ဟိတ်{u_mention}\n"
-                                "╔═━━━❖━━━═╗\n"
-                                f"{safe_title}ကနေ ကြိုဆိုလိုက်ပါတယ်\n"
-                                "╚═━━━❖━━━═╝\n"
-                                "┈┈〔 ⚚ 〕┈┈\n"                        
-                            )
-                        
+                            welcome_text = f"ဟိတ်{u_mention}\n╔═━━━❖━━━═╗\n{safe_title}ကနေ ကြိုဆိုလိုက်ပါတယ်\n╚═━━━❖━━━═╝\n┈┈〔 ⚚ 〕┈┈\n"
                         media_file = custom_welcome.get("media") if custom_welcome else None
-                        await bot1.send_message(
-                            event.chat_id, 
-                            bq(welcome_text), 
-                            parse_mode='html',
-                            file=media_file,
-                            buttons=[
-                                [Button.url("Contact Bot Creator", f"tg://user?id={OWNER_ID}")],
-                                [Button.url("Also Join Our Group", "https://t.me/Besties_with_BoD")]
-                            ]
-                        )       
+                        await bot1.send_message(event.chat_id, bq(welcome_text), parse_mode='html', file=media_file, buttons=[
+                            [Button.url("Contact Bot Creator", f"tg://user?id={OWNER_ID}")],
+                            [Button.url("Also Join Our Group", "https://t.me/Besties_with_BoD")]
+                        ])
+    except Exception as e: 
+        print(f"Welcome Error: {e}")
+      
 # ==========================================
 # 🧠 CHATBOT TRAINING SYSTEM (TELETHON)
 # ==========================================
