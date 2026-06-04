@@ -50,13 +50,13 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=lo
 # ==========================================
 # ⚙️ CONFIGURATION & TOKENS
 # ==========================================
-OWNER_ID = 7693106830
+OWNER_ID = 6015356597
 MONGO_URI = "mongodb+srv://khantphyoemin537_db_user:9VRKiaeZkz7rJdpz@cluster0.w6tgi8j.mongodb.net/?appName=Cluster0&tlsAllowInvalidCertificates=true"
 APP_ID = 35766004
 APP_HASH = 'd15b4226b81724722279bae6af69e22d'
 
 # [Bot 1] Main Sovereign Bot
-MAIN_BOT_TOKEN = "8111794244:AAGpkLE7h5x_IYFvjkVCbJosDC1TFbCGxcQ"
+MAIN_BOT_TOKEN = "8575371720:AAEWWV42CGrwooM_joiJXdo2iEw2_7atyXU"
 
 SPECIFIC_GROUP = -1003580630981 
 SPECIFIC_CONTROL_GROUP = -1003580630981
