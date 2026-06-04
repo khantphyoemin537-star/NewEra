@@ -116,7 +116,7 @@ reply_msg_counters = {}
 def bq(text): return f"<blockquote><b>{text}</b></blockquote>"
 
 def owner_tag():
-    return f"<a href='tg://user?id={OWNER_ID}'>Khant Thu Rain</a>"
+    return f"<a href='tg://user?id={OWNER_ID}'>Hello_Im_DexterMorgan</a>"
 
 async def is_allowed(user_id):
     if user_id == OWNER_ID: return True
@@ -805,7 +805,7 @@ async def reply_save_counter_handler(event):
     reply_msg_counters[chat_id] = reply_msg_counters.get(chat_id, 0) + 1
     
     # 🎯 အတိအကျ ၅ ကြောင်းမြောက်သို့ ရောက်ရှိလာချိန်
-    if reply_msg_counters[chat_id] >= 5:
+    if reply_msg_counters[chat_id] >= 2:
         reply_msg_counters[chat_id] = 0 # Counter ပြန်သတ်မှတ်ခြင်း
         
         user_text = event.text.strip()
