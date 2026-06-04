@@ -14,7 +14,7 @@ from telethon.tl.types import User
 from html import escape as escape_html
 from telethon import TelegramClient, events, types, Button, errors
 
-# --- ERROR ဖြစ်စေတဲ့ GetParticipants ကို ဖယ်ရှားပြီး သေချာ ပြန်ပြင်ထားတဲ့အပိုင်း ---
+# --- Telethon Spec Imports ---
 from telethon.tl.functions.channels import GetAdminLogRequest, GetParticipantsRequest
 from telethon.tl.types import (
     ChannelParticipantAdmin, 
@@ -55,8 +55,6 @@ OWNER_ID = 6015356597
 MONGO_URI = "mongodb+srv://khantphyoemin537_db_user:9VRKiaeZkz7rJdpz@cluster0.w6tgi8j.mongodb.net/?appName=Cluster0&tlsAllowInvalidCertificates=true"
 APP_ID = 35766004
 APP_HASH = 'd15b4226b81724722279bae6af69e22d'
-
-# [Bot 1] Main Sovereign Bot
 MAIN_BOT_TOKEN = "8575371720:AAEWWV42CGrwooM_joiJXdo2iEw2_7atyXU"
 
 SPECIFIC_GROUP = -1003580630981 
@@ -106,7 +104,6 @@ GLOBAL_TALK = False
 TRAINING_ENABLED_MORGAN = False      
 group_msg_counters = {}
 
-# 👈 GLOBAL STATE FOR REPLY SAVE AUTO RESPONDER
 IS_REPLY_ACTIVE = False              
 reply_msg_counters = {}              
 
@@ -158,7 +155,6 @@ async def get_group_uptime(chat_id):
     return (datetime.now(pytz.utc) - doc["start_time"].replace(tzinfo=pytz.utc)).total_seconds()
 
 def has_mention_or_link(message_text):
-    """ စာသားထဲတွင် Mention များ၊ Link များ ပါဝင်နေမှု ရှိမရှိ စိစစ်ခြင်း """
     if not message_text:
         return False
     if '@' in message_text or 't.me/' in message_text or 'http' in message_text:
@@ -166,24 +162,22 @@ def has_mention_or_link(message_text):
     return False
 
 # ====================================================================================
-# 🧠 HIGH-PERFORMANCE SMART REPLY SEARCH ENGINE (FIXED LOGIC)
+# 🧠 HIGH-PERFORMANCE SMART REPLY SEARCH ENGINE
 # ====================================================================================
 async def fetch_optimized_smart_reply(user_text):
-    """ reply_save_col ထဲမှ trigger သည် user_text ထဲတွင် ပါဝင်မှု ရှိမရှိ အမြန်ဆုံး ရှာဖွေပေးသည့် စနစ် """
     reply_text = None
     user_text_clean = user_text.strip().lower()
 
-    # 🎯 CORRECT PIPELINE: လူပို့လိုက်တဲ့စာထဲမှာ DB က trigger ပါဝင်နေသလားကို $indexOfCP နဲ့ ရှာဖွေခြင်း
     match_pipeline = [
         {"$match": {
             "$expr": {
                 "$and": [
-                    {"$gte": [{"$strLenCP": "$trigger"}, 2]}, # trigger စာသား အနည်းဆုံး ၂ လုံးနှင့်အထက်ဖြစ်ရမည်
-                    {"$gte": [{"$indexOfCP": [user_text_clean, {"$toLower": "$trigger"}]}, 0]} # လူ့စာသားထဲတွင် trigger ပါဝင်နေရမည်
+                    {"$gte": [{"$strLenCP": "$trigger"}, 2]}, 
+                    {"$gte": [{"$indexOfCP": [user_text_clean, {"$toLower": "$trigger"}]}, 0]} 
                 ]
             }
         }},
-        {"$sample": {"size": 1}} # ကိုက်ညီတာတွေထဲကမှ random ၁ ခု ဆွဲထုတ်ခြင်း
+        {"$sample": {"size": 1}} 
     ]
 
     try:
@@ -197,7 +191,6 @@ async def fetch_optimized_smart_reply(user_text):
         print(f"Smart Reply DB Error: {e}")
         reply_text = None
 
-    # Fallback Mechanism: ကိုက်ညီမှုမရှိပါက random_talk ထဲမှ အမြန်ဆွဲထုတ်ခြင်း
     if not reply_text:
         try:
             fallback_cursor = talk_col.aggregate([{"$sample": {"size": 1}}])
@@ -209,7 +202,6 @@ async def fetch_optimized_smart_reply(user_text):
         except Exception:
             reply_text = None
 
-    # နောက်ဆုံးပိတ် လုံးဝရှာမတွေ့မှ သုံးမည့် Default စကားလုံးများ
     if not reply_text:
         default_phrases = ["ဟုတ်ပဗျာ", "အေးပါဗျာ", "ဒါနဲ့လေ...", "ဟီးဟီး", "ဟုတ်လား Chief", "အော်... အင်း"]
         reply_text = random.choice(default_phrases)
@@ -237,7 +229,7 @@ async def welcome_goodbye(event):
                 
                 try: members = getattr(chat, 'participants_count', 'Unknown')
                 except: members = "Unknown"
-                msg2 = f"မင်္ဂလာပါ {safe_title}က \n{bot_mention}ထည့်သုံးထားပါသေးတယ်\n\nGroup Name - {safe_title}\nGroup ID - <code>{chat.id}</code>\nMembers အရေအတွက် - {members}\nBot Creator - {owner_tag}"
+                msg2 = f"မင်္ဂလာပါ {safe_title}က \n{bot_mention}ထည့်သုံးထားပါသေးတယ်\n\nGroup Name - {safe_title}\nGroup ID - <code>{chat.id}</code>\nMembers အရေအတွက် - {members}\nBot Creator - {owner_tag()}"
                 await bot1.send_message(SPECIFIC_GROUP, bq(msg2), parse_mode='html')
             else:
                 custom_welcome = await welcome_col.find_one({"chat_id": chat.id})
@@ -752,7 +744,7 @@ async def save_morgan_bulk_messages(event):
 # 👈 [ADVANCED & HIGH-SPEED] REPLY SAVE AUTO RESPONDER SYSTEM (NON-BLOCKING)
 # ====================================================================================
 
-# 👑 OWNER COMMAND: စာလိုက်ထောက်စနစ်ဖွင့်ခြင်း (/ဟိုက်)
+# 👑 OWNER COMMAND: စာလိုက်ထောက်စနစ်ဖွင့်ခြင်း (/ktr)
 @bot1.on(events.NewMessage(pattern=r'^/ktr$'))
 async def turn_on_reply_save_match(event):
     global IS_REPLY_ACTIVE
@@ -760,7 +752,7 @@ async def turn_on_reply_save_match(event):
     IS_REPLY_ACTIVE = True
     await event.reply(bq("🎯 စာလိုက်ထောက်စနစ် (Auto-Responder) ကို Group အားလုံးအတွက် ဖွင့်လိုက်ပါပြီ Chief!"), parse_mode='html')
 
-# 👑 OWNER COMMAND: စာလိုက်ထောက်စနစ်ပိတ်ခြင်း (/ဟိုက်း)
+# 👑 OWNER COMMAND: စာလိုက်ထောက်စနစ်ပိတ်ခြင်း (/ktrr)
 @bot1.on(events.NewMessage(pattern=r'^/ktrr$'))
 async def turn_off_reply_save_match(event):
     global IS_REPLY_ACTIVE
@@ -771,17 +763,12 @@ async def turn_off_reply_save_match(event):
 async def processed_background_reply(event, user_text):
     """ Non-blocking Background Worker: Database ရှာဖွေခြင်းနှင့် စာပြန်ခြင်းများကို သီးခြားလုပ်ဆောင်ပေးသည် """
     chat_entity = await event.get_input_chat()
-    
-    # 🧠 DB ထဲကနေ Context ကိုက်ညီမယ့် စမတ်အဖြေကို စိစစ်ပြီး အမြန်ဆုံးဆွဲထုတ်ခြင်း
     smart_reply = await fetch_optimized_smart_reply(user_text)
     
     if smart_reply:
         try:
-            # စက်ရုပ်လို ချက်ချင်းကြီးမဖြစ်ဘဲ လူလိုသဘာဝကျကျ ဖြစ်သွားစေရန် Typing ပြခြင်း
             async with bot1.action(chat_entity, 'typing'):
                 await asyncio.sleep(random.uniform(1.0, 2.2))
-                
-            # ၅ ကြောင်းမြောက် Message ကို တရားဝင် ထောက်ပြီး Reply ပြန်ပေးခြင်း
             await event.reply(smart_reply)
         except errors.rpcerrorlist.FloodWaitError as e:
             await asyncio.sleep(e.seconds)
@@ -793,24 +780,39 @@ async def processed_background_reply(event, user_text):
 async def reply_save_counter_handler(event):
     global reply_msg_counters, IS_REPLY_ACTIVE
     
-    # System Switch စစ်ဆေးခြင်း
     if not IS_REPLY_ACTIVE: return
     if event.is_private or not event.text or event.text.startswith(('/', '.', 'မှတ်', '@')): return
     
-    # Bot ကိုယ်တိုင် ပို့တာဆိုရင် ကျော်မယ်
     sender = await event.get_sender()
     if sender and sender.bot: return
 
     chat_id = event.chat_id
     reply_msg_counters[chat_id] = reply_msg_counters.get(chat_id, 0) + 1
     
-    # 🎯 အတိအကျ ၅ ကြောင်းမြောက်သို့ ရောက်ရှိလာချိန်
-    if reply_msg_counters[chat_id] >= 2:
-        reply_msg_counters[chat_id] = 0 # Counter ပြန်သတ်မှတ်ခြင်း
-        
+    # 🎯 အတိအကျ ၅ ကြောင်းမြောက်သို့ ရောက်ရှိလာချိန် (Logic အား အမှန်ပြင်ဆင်ပြီး)
+    if reply_msg_counters[chat_id] >= 5:
+        reply_msg_counters[chat_id] = 0 
         user_text = event.text.strip()
-        
-        # 🚀 CRITICAL OPTIMIZATION: Main Event Loop မပိတ်ဆို့သွားစေရန် Background Task အဖြစ် လွှဲပြောင်းပေးခြင်း
+        asyncio.create_task(processed_background_reply(event, user_text))
+
+# 💬 GLOBAL TALK RESPONDER ENGINE (၇ ကြောင်းမြောက်တိုင်း စကားဝင်ပြောမည့် စနစ်)
+@bot1.on(events.NewMessage(incoming=True))
+async def global_talk_counter_handler(event):
+    global group_msg_counters, GLOBAL_TALK
+    
+    if not GLOBAL_TALK: return
+    if event.is_private or not event.text or event.text.startswith(('/', '.', 'မှတ်', '@')): return
+    
+    sender = await event.get_sender()
+    if sender and sender.bot: return
+
+    chat_id = event.chat_id
+    group_msg_counters[chat_id] = group_msg_counters.get(chat_id, 0) + 1
+    
+    # 🎯 Group ထဲတွင် စကားပြောသံ ၇ ကြောင်းပြည့်တိုင်း Auto ဝင်ရောက်တုံ့ပြန်ခြင်း
+    if group_msg_counters[chat_id] >= 7:
+        group_msg_counters[chat_id] = 0
+        user_text = event.text.strip()
         asyncio.create_task(processed_background_reply(event, user_text))
 
 # ==========================================
@@ -830,4 +832,3 @@ if __name__ == '__main__':
         asyncio.run(start_system())
     except (KeyboardInterrupt, SystemExit):
         print("System Stopped Safely.")
-
