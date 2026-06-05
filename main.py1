@@ -52,6 +52,7 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=lo
 # ⚙️ CONFIGURATION & TOKENS
 # ==========================================
 OWNER_ID = 6015356597
+OWNER_USERNAME = "Hello_Im_DexterMorgan"
 MONGO_URI = "mongodb+srv://khantphyoemin537_db_user:9VRKiaeZkz7rJdpz@cluster0.w6tgi8j.mongodb.net/?appName=Cluster0&tlsAllowInvalidCertificates=true"
 APP_ID = 35766004
 APP_HASH = 'd15b4226b81724722279bae6af69e22d'
@@ -91,6 +92,7 @@ bot_names = []
 # 📊 STATE VARIABLES
 # ==========================================
 sticker_spam_data = {}
+char_spam_data = {}
 admin_cache = {}          
 active_rank_messages = {} 
 bot_bully_tasks = {}      
@@ -115,7 +117,7 @@ reply_msg_counters = {}
 def bq(text): return f"<blockquote><b>{text}</b></blockquote>"
 
 def owner_tag():
-    return f"<a href='tg://user?id={OWNER_ID}'>Hello_Im_DexterMorgan</a>"
+    return f"<a href='https://t.me/{OWNER_USERNAME}'>@{Hello_Im_DexterMorgan}</a>"
 
 async def is_allowed(user_id):
     if user_id == OWNER_ID: return True
@@ -280,11 +282,11 @@ async def welcome_goodbye(event):
                             welcome_text = welcome_text.replace("{mention}", u_mention).replace("{group}", safe_title)
                         else:
                             welcome_text = (
-                                f"ဟိတ်{u_mention}\n"
+                                f"ဟိုက်{u_mention}\n"
                                 "╔═━━━❖━━━═╗\n"
                                 f"{safe_title}ကနေ ကြိုဆိုလိုက်ပါတယ်\n"
                                 "╚═━━━❖━━━═╝\n"
-                                "┈┈〔 ⚚ 〕┈┈\n"                        
+                                f"This bot is proudly developed and maintained by 𝑷𝑨𝑹𝑨𝑫𝑶𝑿 𝑭𝒂𝒎𝒊𝒍𝒚⌬𝑩𝑶𝑫.\n"
                             )
                         
                         media_file = custom_welcome.get("media") if custom_welcome else None
@@ -294,8 +296,8 @@ async def welcome_goodbye(event):
                             parse_mode='html',
                             file=media_file,
                             buttons=[
-                                [Button.url("Contact Bot Creator", f"tg://user?id={OWNER_ID}")],
-                                [Button.url("Also Join Our Group", "https://t.me/Comeback_BoD")]
+                                [Button.url("Bot ဖြင့် Broadcasting အပ်ရန်", f"tg://user?id={OWNER_ID}")],
+                                [Button.url("ကျွန်ုပ်တို့Groupသို့ဝင်ရန်", "https://t.me/Comeback_BoD")]
                             ]
                         )
         elif event.user_left or event.user_kicked:
@@ -467,7 +469,65 @@ async def sticker_spam_(event):
         time_diff = (recent_times[-1] - recent_times[-3]).total_seconds()
         if time_diff <= 1.0: 
             await event.delete()
+
+@bot1.on(events.NewMessage)
+async def character_spam_filter(event):
+    if event.is_private or not event.text: return
+    if event.sender_id in bot_ids: return
+
+    text = event.text.strip()
+    # 🎯 Character 1, 2, 3 သို့မဟုတ် စာလုံးအတိုလေးတွေ (စာလုံးရေ ၃ လုံးအောက်) ကိုပဲ စစ်ထုတ်ပါမယ်
+    if len(text) > 3: return 
+
+    sender_id = event.sender_id
+    chat_id = event.chat_id
+    now = datetime.now()
+
+    if sender_id not in char_spam_data: 
+        char_spam_data[sender_id] = {"times": [], "ids": []}
         
+    char_spam_data[sender_id]["times"].append(now)
+    char_spam_data[sender_id]["ids"].append(event.id)
+
+    one_minute_ago = now - timedelta(seconds=60)
+    valid_data = [(t, i) for t, i in zip(char_spam_data[sender_id]["times"], char_spam_data[sender_id]["ids"]) if t > one_minute_ago]
+    char_spam_data[sender_id]["times"] = [x[0] for x in valid_data]
+    char_spam_data[sender_id]["ids"] = [x[1] for x in valid_data]
+
+    recent_times = char_spam_data[sender_id]["times"]
+    recent_ids = char_spam_data[sender_id]["ids"]
+
+    # 🚫 အဆင့် (၂) - သတိပေးချက်ကို မထိလေးစားလုပ်ပြီး ထပ်ပို့လျှင် (၆ ကြိမ်နှင့်အထက်) ၅ မိနစ် Mute မည်
+    if len(recent_times) >= 6:
+        try:
+            is_admin = await check_admin(chat_id, sender_id)
+            await bot1.delete_messages(chat_id, recent_ids) # Spam ထားသမျှအကုန်ဖျက်
+            sender = await event.get_sender()
+            mention = f"<a href='tg://user?id={sender_id}'>{escape_html(sender.first_name)}</a>"
+
+            if is_admin:
+                action_msg = f"⚠️ Admin {mention}... သတိပေးထားတဲ့ကြားက စာတိုတွေ ထပ်စပမ်းနေလို့ ဆင်ခြင်ပေးဖို့ မေတ္တာရပ်ခံပါတယ်။"
+            else:
+                # ⏳ ၅ မိနစ် ကန့်သတ်ချက် (until_date=timedelta(minutes=5)) ဖြင့် စကားပြောခွင့်ပိတ်ခြင်း
+                await bot1.edit_permissions(chat_id, sender_id, until_date=datetime.now() + timedelta(minutes=5), send_messages=False)
+                action_msg = f"🚫 {mention} ကို သတိပေးချက်ကို မလိုက်နာဘဲ စာတိုတွေ ဆက်တိုက် Spam တဲ့အတွက် ၅ မိနစ်ခန့် Mute လိုက်ပါပြီ။"
+            
+            await event.respond(bq(action_msg), parse_mode='html') # 📝 bq() ပါဝင်ပါသည်
+            del char_spam_data[sender_id]
+            return
+        except Exception as e: print(f"Char Spam Mute Error: {e}")
+
+    # ⚠️ အဆင့် (၁) - ၄ ကြိမ်ထက်ပိုပို့လျှင် (၅ ကြိမ်မြောက်တွင်) ပို့ထားသမျှဖျက်ပြီး သတိပေးစာပို့မည်
+    if len(recent_times) == 5:
+        try:
+            await bot1.delete_messages(chat_id, recent_ids) # ပို့ထားတဲ့ ၅ စောင်လုံးဖျက်
+            sender = await event.get_sender()
+            mention = f"<a href='tg://user?id={sender_id}'>{escape_html(sender.first_name)}</a>"
+            
+            warn_msg = f"⚠️ {mention} စာ Spam နေလို့ အကုန်ဖျက်လိုက်ပါပြီ။ နောက်တစ်ခါ ထပ်ပို့ရင် 5 မိနစ် Mute ခံရပါလိမ့်မယ်။"
+            await event.respond(bq(warn_msg), parse_mode='html') # 📝 bq() ပါဝင်ပါသည်
+        except Exception as e: print(f"Char Spam Warn Error: {e}")
+
 @bot1.on(events.NewMessage(pattern=r'^[/.]f\s+(.*)'))
 async def add_filter(event):
     if not await check_admin(event.chat_id, event.sender_id): return
@@ -495,8 +555,8 @@ async def get_user_id(event):
     if reply:
         target_id, user = reply.sender_id, await reply.get_sender()
         name = escape_html(user.first_name) if user else "User"
-        msg = f"👤 <b>Name:</b> {name}\n🆔 <b>User ID:</b> <code>{target_id}</code>"
-    else: msg = f"🆔 <b>Your ID:</b> <code>{event.sender_id}</code>"
+        msg = f" <b>Name:</b> {name}\nID <b>User ID:</b> <code>{target_id}</code>"
+    else: msg = f"ID <b>Your ID:</b> <code>{event.sender_id}</code>"
     await event.respond(bq(msg), parse_mode='html')
 
 @bot1.on(events.NewMessage(pattern=r'^[/.]gid'))
@@ -598,11 +658,36 @@ async def broadcast(event):
 
 @bot1.on(events.NewMessage())
 async def protection_logic(event):
-    if event.is_private or not event.text or event.sender_id == OWNER_ID or event.sender_id in bot_ids: return
+    if event.is_private: return
+    if not event.text or event.sender_id == OWNER_ID or event.sender_id in bot_ids: return
+
     text, chat_id, sender_id = event.text.strip(), event.chat_id, event.sender_id
-    
-    if any(key in text for key in ["Bio", "bio", "ဘိုင်အို", "ဘိုင်-အို", "ဘိုင်-O", "ဘီအိုင်အို","ဘိုင် အို"]) and not await check_admin(chat_id, sender_id):
-        try: return await event.delete()
+    sender = await event.get_sender()
+
+    if re.search(r'/harem(@\w+)?', text) or re.search(r'/waifu(@\w+)?', text):
+        try:
+            mention = f"<a href='tg://user?id={sender_id}'>{escape_html(sender.first_name)}</a>"
+            cmd_type = "harem" if "harem" in text.lower() else "waifu"
+            async def delay_delete():
+                await asyncio.sleep(2)
+                try: await event.delete()
+                except: pass
+            asyncio.create_task(delay_delete())
+
+            msg_template = "<b>{type} လုပ်သူ-</b> {mention}\nChat သန့်ရှင်းအောင် ဖျက်လိုက်ပါပြီ。"
+            warn_msg = await event.respond(bq(msg_template.format(type=cmd_type, mention=mention)), parse_mode='html')
+            for i in range(2, -1, -1):
+                await asyncio.sleep(1)
+                if i == 0: await warn_msg.delete(); break
+                await warn_msg.edit(bq(msg_template.format(type=cmd_type, mention=mention) + f"\n\n{i} စက္ကန့်အတွင်း ပျောက်ကွယ်သွားပါမယ်။"), parse_mode='html')
+            return 
+        except: pass
+
+    if any(key in text for key in ["Bio", "bio", "ဘိုင်အို", "ဘိုင်-အို", "ဘိုင်-O", "ဘီအိုင်အို"]) and not await check_admin(chat_id, sender_id):
+        try:
+            await event.delete()
+            await event.respond(bq("bioမှာဘာဖြစ်တာလဲ၊မသိချင်ဘူး ဖျက်လိုက်ပြီ။"), parse_mode='html')
+            return 
         except: pass
 
     urls = re.findall(r'(https?://\S+|www\.\S+)', text)
@@ -610,10 +695,15 @@ async def protection_logic(event):
         if await check_admin(chat_id, sender_id):
             try:
                 f_msg = await bot1.forward_messages(event.chat_id, event.message)
+                mention = f"<a href='tg://user?id={sender_id}'>{escape_html(sender.first_name)}</a>"
+                await f_msg.reply(f"<b>Link Sender- {mention}</b>", parse_mode='html')
                 await event.delete()
             except: pass
         else:
-            try: await event.delete() 
+            try:
+                await event.delete() 
+                mention = f"<a href='tg://user?id={sender_id}'>{escape_html(sender.first_name)}</a>"
+                await event.respond(bq(f"ဟိတ်.. {mention} link မပို့နဲ့ မရဘူး၊ မင်း link ကို ငါဖျက်လိုက်ပြီ🫵"), parse_mode='html')
             except: pass
 
 @bot1.on(events.NewMessage(pattern=r'^/play(?:\s+(.*))?'))
