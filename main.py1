@@ -504,26 +504,6 @@ async def get_group_id(event):
     if event.is_private: return await event.respond(bq("ဒါက Private Chat မို့လို့ Group ID မရှိပါဘူး!"), parse_mode='html')
     await event.respond(bq(f"📍 <b>Group:</b> {escape_html(event.chat.title)}\n🌐 <b>Chat ID:</b> <code>{event.chat_id}</code>"), parse_mode='html')
 
-@bot1.on(events.NewMessage(pattern=r'^/setwc(?:\s+(.*))?'))
-async def set_custom_welcome(event):
-    if event.sender_id != OWNER_ID: return
-    reply = await event.get_reply_message()
-    text_to_save = event.pattern_match.group(1) 
-    media_to_save = None
-
-    if reply:
-        if reply.media: media_to_save = reply.media
-        if not text_to_save and reply.text: text_to_save = reply.text
-
-    if not text_to_save and not media_to_save: return
-
-    await welcome_col.update_one(
-        {"chat_id": event.chat_id},
-        {"$set": {"text": text_to_save, "media": media_to_save}},
-        upsert=True
-    )
-    await event.respond(bq(f"✅ <b>{escape_html(event.chat.title)}</b> အတွက် Welcome Message ကို မှတ်သားလိုက်ပါပြီ။"), parse_mode='html')
-
 @bot1.on(events.NewMessage(pattern=r'^/mute(?:@\w+)?(?:\s+(.*))?'))
 async def mute_user(event):
     if not await check_ban_rights(event.chat_id, event.sender_id): return
@@ -620,19 +600,8 @@ async def broadcast(event):
 async def protection_logic(event):
     if event.is_private or not event.text or event.sender_id == OWNER_ID or event.sender_id in bot_ids: return
     text, chat_id, sender_id = event.text.strip(), event.chat_id, event.sender_id
-
-    if re.search(r'/harem(@\w+)?', text) or re.search(r'/waifu(@\w+)?', text):
-        try:
-            sender = await event.get_sender()
-            mention = f"<a href='tg://user?id={sender_id}'>{escape_html(sender.first_name)}</a>"
-            asyncio.create_task(event.delete())
-            warn_msg = await event.respond(bq(f"Chat သန့်ရှင်းအောင် ဖျက်လိုက်ပါပြီ။"))
-            await asyncio.sleep(2)
-            await warn_msg.delete()
-            return 
-        except: pass
-
-    if any(key in text for key in ["Bio", "bio", "ဘိုင်အို", "ဘိုင်-အို", "ဘိုင်-O", "ဘီအိုင်အို"]) and not await check_admin(chat_id, sender_id):
+    
+    if any(key in text for key in ["Bio", "bio", "ဘိုင်အို", "ဘိုင်-အို", "ဘိုင်-O", "ဘီအိုင်အို","ဘိုင် အို"]) and not await check_admin(chat_id, sender_id):
         try: return await event.delete()
         except: pass
 
@@ -654,8 +623,17 @@ async def play_response(event):
     if not song_title: return 
     try:
         await event.delete()
-        mention = f"<a href='tg://user?id={event.sender_id}'>{escape_html((await event.get_sender()).first_name)}</a>"
-        msg = await event.respond(bq(f"🎧 Song Title- {escape_html(song_title)}\nသီချင်းဖွင့်သူ- {mention}"))
+        sender = await event.get_sender()
+        
+        # 🎯 Username ရှိ/မရှိ စစ်ဆေးပြီး ပုံစံမပျက်အောင် Mention ဖန်တီးခြင်း
+        if sender and getattr(sender, 'username', None):
+            mention = f"@{sender.username}"
+        else:
+            # Username မရှိပါက နာမည်ကို ယူမည် (နာမည်ပါမရှိပါက 'User' ဟု သုံးမည်)
+            first_name = getattr(sender, 'first_name', None) or "User"
+            mention = f"<a href='tg://user?id={sender.id}'>{escape_html(first_name)}</a>"
+            
+        msg = await event.respond(bq(f"🎧 Song Title- {escape_html(song_title)}\nသီချင်းဖွင့်သူ- {mention}"), parse_mode='html')
         await asyncio.sleep(3)
         await msg.delete()
     except: pass
