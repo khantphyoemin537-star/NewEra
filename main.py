@@ -117,7 +117,7 @@ reply_msg_counters = {}
 def bq(text): return f"<blockquote><b>{text}</b></blockquote>"
 
 def owner_tag():
-    return f"<a href='https://t.me/{OWNER_USERNAME}'>@{Hello_Im_DexterMorgan}</a>"
+    return f"<a href='https://t.me/{OWNER_USERNAME}'>@{OWNER_USERNAME}</a>"
 
 async def is_allowed(user_id):
     if user_id == OWNER_ID: return True
@@ -172,7 +172,6 @@ async def fetch_optimized_smart_reply(user_text):
     reply_text = None
     user_text_clean = user_text.strip().lower()
 
-    # Dynamic Schema Match: Checks trigger, key, or keyword fields across historical records
     match_pipeline = [
         {"$match": {
             "$or": [
@@ -201,12 +200,10 @@ async def fetch_optimized_smart_reply(user_text):
         matched_docs = await cursor.to_list(length=1)
         if matched_docs:
             doc = matched_docs[0]
-            # Handle array types
             if doc.get("responses") and isinstance(doc["responses"], list):
                 chosen = random.choice(doc["responses"])
             elif doc.get("values") and isinstance(doc["values"], list):
                 chosen = random.choice(doc["values"])
-            # Handle string variations
             elif doc.get("response"): chosen = doc["response"]
             elif doc.get("value"): chosen = doc["value"]
             elif doc.get("text"): chosen = doc["text"]
@@ -218,7 +215,6 @@ async def fetch_optimized_smart_reply(user_text):
         print(f"Smart Reply DB Error: {e}")
         reply_text = None
 
-    # Fallback Tier 1: Check standard random conversation dataset
     if not reply_text:
         try:
             fallback_cursor = talk_col.aggregate([{"$sample": {"size": 1}}])
@@ -230,7 +226,6 @@ async def fetch_optimized_smart_reply(user_text):
         except Exception:
             reply_text = None
 
-    # Fallback Tier 2: Check Morgan specialized dataset
     if not reply_text:
         try:
             morgan_cursor = morgan_col.aggregate([{"$sample": {"size": 1}}])
@@ -240,7 +235,6 @@ async def fetch_optimized_smart_reply(user_text):
         except Exception:
             reply_text = None
 
-    # Fallback Tier 3: Internal static arrays
     if not reply_text:
         default_phrases = ["ဟုတ်ပဗျာ", "အေးပါဗျာ", "ဒါနဲ့လေ...", "ဟီးဟီး", "ဟုတ်လား Chief", "အော်... အင်း"]
         reply_text = random.choice(default_phrases)
@@ -325,7 +319,7 @@ async def turn_off_training(event):
     global TRAINING_ENABLED
     if event.sender_id != OWNER_ID: return
     TRAINING_ENABLED = False
-    await event.reply(bq("⛔ Sovereign Training Mode ကို ပိတ်လိုက်ပါပြီ။\nယခုတွင် /r Command အသုံးပြု၍ မရနိုင်တော့ပါ။"), parse_mode='html')
+    await event.reply(bq("⛔ Sovereign Training Mode ကို ปိတ်လိုက်ပါပြီ။\nယခုတွင် /r Command အသုံးပြု၍ မရနိုင်တော့ပါ။"), parse_mode='html')
 
 @bot1.on(events.NewMessage(pattern=r'^/r(\s+.*)?$'))
 async def train_bot(event):
@@ -365,9 +359,9 @@ async def train_bot(event):
     debug_list = "\n".join([f"• {r}" for r in new_responses])
     await event.reply(bq(f"✨ စကားလုံးအသစ် မှတ်သားမှု အောင်မြင်သည်!\n🔑 Key: {keyphrase}\n📝 ขွဲထုတ်ရရှိသည့် အဖြေများ ({len(new_responses)} ခု):\n{debug_list}\n\n💡 {action_msg}"), parse_mode='html')
 
-# ====================================================================================
+# ==========================================
 # 🧹 DISMISS DELETED ADMINS SYSTEM
-# ====================================================================================
+# ==========================================
 @bot1.on(events.NewMessage(pattern=r'^/dismiss$'))
 async def dismiss_deleted_admins(event):
     if not event.is_group: return await event.reply(bq("❌ ဒီ Command ကို Group များထဲတွင်သာ အသုံးပြုနိုင်ပါသည်။"), parse_mode='html')
@@ -476,7 +470,6 @@ async def character_spam_filter(event):
     if event.sender_id in bot_ids: return
 
     text = event.text.strip()
-    # 🎯 Character 1, 2, 3 သို့မဟုတ် စာလုံးအတိုလေးတွေ (စာလုံးရေ ၃ လုံးအောက်) ကိုပဲ စစ်ထုတ်ပါမယ်
     if len(text) > 3: return 
 
     sender_id = event.sender_id
@@ -497,35 +490,32 @@ async def character_spam_filter(event):
     recent_times = char_spam_data[sender_id]["times"]
     recent_ids = char_spam_data[sender_id]["ids"]
 
-    # 🚫 အဆင့် (၂) - သတိပေးချက်ကို မထိလေးစားလုပ်ပြီး ထပ်ပို့လျှင် (၆ ကြိမ်နှင့်အထက်) ၅ မိနစ် Mute မည်
     if len(recent_times) >= 6:
         try:
             is_admin = await check_admin(chat_id, sender_id)
-            await bot1.delete_messages(chat_id, recent_ids) # Spam ထားသမျှအကုန်ဖျက်
+            await bot1.delete_messages(chat_id, recent_ids) 
             sender = await event.get_sender()
             mention = f"<a href='tg://user?id={sender_id}'>{escape_html(sender.first_name)}</a>"
 
             if is_admin:
                 action_msg = f"⚠️ Admin {mention}... သတိပေးထားတဲ့ကြားက စာတိုတွေ ထပ်စပမ်းနေလို့ ဆင်ခြင်ပေးဖို့ မေတ္တာရပ်ခံပါတယ်။"
             else:
-                # ⏳ ၅ မိနစ် ကန့်သတ်ချက် (until_date=timedelta(minutes=5)) ဖြင့် စကားပြောခွင့်ပိတ်ခြင်း
                 await bot1.edit_permissions(chat_id, sender_id, until_date=datetime.now() + timedelta(minutes=5), send_messages=False)
                 action_msg = f"🚫 {mention} ကို သတိပေးချက်ကို မလိုက်နာဘဲ စာတိုတွေ ဆက်တိုက် Spam တဲ့အတွက် ၅ မိနစ်ခန့် Mute လိုက်ပါပြီ။"
             
-            await event.respond(bq(action_msg), parse_mode='html') # 📝 bq() ပါဝင်ပါသည်
+            await event.respond(bq(action_msg), parse_mode='html') 
             del char_spam_data[sender_id]
             return
         except Exception as e: print(f"Char Spam Mute Error: {e}")
 
-    # ⚠️ အဆင့် (၁) - ၄ ကြိမ်ထက်ပိုပို့လျှင် (၅ ကြိမ်မြောက်တွင်) ပို့ထားသမျှဖျက်ပြီး သတိပေးစာပို့မည်
     if len(recent_times) == 5:
         try:
-            await bot1.delete_messages(chat_id, recent_ids) # ပို့ထားတဲ့ ၅ စောင်လုံးဖျက်
+            await bot1.delete_messages(chat_id, recent_ids) 
             sender = await event.get_sender()
             mention = f"<a href='tg://user?id={sender_id}'>{escape_html(sender.first_name)}</a>"
             
             warn_msg = f"⚠️ {mention} စာ Spam နေလို့ အကုန်ဖျက်လိုက်ပါပြီ။ နောက်တစ်ခါ ထပ်ပို့ရင် 5 မိနစ် Mute ခံရပါလိမ့်မယ်။"
-            await event.respond(bq(warn_msg), parse_mode='html') # 📝 bq() ပါဝင်ပါသည်
+            await event.respond(bq(warn_msg), parse_mode='html') 
         except Exception as e: print(f"Char Spam Warn Error: {e}")
 
 @bot1.on(events.NewMessage(pattern=r'^[/.]f\s+(.*)'))
@@ -715,11 +705,9 @@ async def play_response(event):
         await event.delete()
         sender = await event.get_sender()
         
-        # 🎯 Username ရှိ/မရှိ စစ်ဆေးပြီး ပုံစံမပျက်အောင် Mention ဖန်တီးခြင်း
         if sender and getattr(sender, 'username', None):
             mention = f"@{sender.username}"
         else:
-            # Username မရှိပါက နာမည်ကို ယူမည် (နာမည်ပါမရှိပါက 'User' ဟု သုံးမည်)
             first_name = getattr(sender, 'first_name', None) or "User"
             mention = f"<a href='tg://user?id={sender.id}'>{escape_html(first_name)}</a>"
             
@@ -830,6 +818,34 @@ async def dark_passenger_watcher(event):
                 await event.respond(bq(random.choice(fake_words)), parse_mode='html')
             except: pass
 
+# ==========================================
+# 🌐 FOREIGN LANGUAGE FILTER SYSTEM (NEW)
+# ==========================================
+# Chinese, Japanese, Korean, Thai, Arabic script များကို ရှာဖွေမည့် တိကျသော Unicode Ranges Regex
+FORBIDDEN_SCRIPTS = re.compile(r'[\u4e00-\u9fff\u3400-\u4dbf\u3040-\u309f\u30a0-\u30ff\u0e00-\u0e7f\u0600-\u06ff\uac00-\ud7af]')
+
+@bot1.on(events.NewMessage(chats=SPECIFIC_GROUP))
+async def foreign_language_filter_handler(event):
+    if not event.text or event.is_private:
+        return
+        
+    # Owner၊ Bots များနှင့် Group Admin များကို Ignore လုပ်ခြင်း (ဘေးကင်းစေရန်)
+    if event.sender_id == OWNER_ID or event.sender_id in bot_ids:
+        return
+    if await check_admin(event.chat_id, event.sender_id):
+        return
+
+    # တားမြစ်ထားသော ဘာသာစကား Script ပါဝင်လာပါက ဖျက်ချမည်
+    if FORBIDDEN_SCRIPTS.search(event.text):
+        try:
+            await event.delete()
+            # အဖွဲ့သားများ သိရှိစေရန် Auto-delete Warning စာတိုပြပေးခြင်း
+            warn_msg = await event.respond(bq("⚠️ ဒီ Group ထဲမှာ မြန်မာစာ၊ အင်္ဂလိပ်စာနှင့် ဂဏန်းများသာ ခွင့်ပြုထားပါတယ်ဗျာ။"), parse_mode='html')
+            await asyncio.sleep(3)
+            await warn_msg.delete()
+        except Exception as e:
+            print(f"Language Filter Error: {e}")
+
 # ====================================================================================
 # 🎭 MORGAN AUTOMATIC TALK SYSTEM
 # ====================================================================================
@@ -849,7 +865,6 @@ async def save_morgan_bulk_messages(event):
 # 👈 [ADVANCED & HIGH-SPEED] REPLY SAVE AUTO RESPONDER SYSTEM (NON-BLOCKING)
 # ====================================================================================
 
-# 👑 OWNER COMMAND: စာလိုက်ထောက်စနစ်ဖွင့်ခြင်း (/ktr [5/7/9...])
 @bot1.on(events.NewMessage(pattern=r'^/ktr(?:\s+(\d+))?$'))
 async def turn_on_reply_save_match(event):
     global IS_REPLY_ACTIVE, REPLY_INTERVAL
@@ -862,7 +877,6 @@ async def turn_on_reply_save_match(event):
         
     await event.reply(bq(f"🎯 စာလိုက်ထောက်စနစ် (Auto-Responder) ကို Group အားလုံးအတွက် ဖွင့်လိုက်ပါပြီ။ ယခုမှစ၍ {REPLY_INTERVAL} ကြောင်းမြောက်တိုင်း တုံ့ပြန်ပေးပါမည် Chief!"), parse_mode='html')
 
-# 👑 OWNER COMMAND: စာလိုက်ထောက်စနစ်ပိတ်ခြင်း (/ktrr)
 @bot1.on(events.NewMessage(pattern=r'^/ktrr$'))
 async def turn_off_reply_save_match(event):
     global IS_REPLY_ACTIVE
@@ -871,7 +885,6 @@ async def turn_off_reply_save_match(event):
     await event.reply(bq("⛔ စာလိုက်ထောက်စနစ်ကို ပိတ်လိုက်ပါပြီ မောလို့ နားဦးမယ် Chief!"), parse_mode='html')
 
 async def processed_background_reply(event, user_text):
-    """ Non-blocking Background Worker: Database ရှာဖွေခြင်းနှင့် စာပြန်ခြင်းများကို သီးခြားလုပ်ဆောင်ပေးသည် """
     chat_entity = await event.get_input_chat()
     smart_reply = await fetch_optimized_smart_reply(user_text)
     
@@ -885,7 +898,6 @@ async def processed_background_reply(event, user_text):
         except Exception:
             pass
 
-# 💬 သတ်မှတ်ထားသော မက်ဆေ့ခ်ျတိုင်းအား စိစစ်ပြီး သဘာဝကျကျ တုံ့ပြန်မည့် Engine
 @bot1.on(events.NewMessage(incoming=True))
 async def reply_save_counter_handler(event):
     global reply_msg_counters, IS_REPLY_ACTIVE, REPLY_INTERVAL
@@ -899,13 +911,11 @@ async def reply_save_counter_handler(event):
     chat_id = event.chat_id
     reply_msg_counters[chat_id] = reply_msg_counters.get(chat_id, 0) + 1
     
-    # Dynamic Custom Interval
     if reply_msg_counters[chat_id] >= REPLY_INTERVAL:
         reply_msg_counters[chat_id] = 0 
         user_text = event.text.strip()
         asyncio.create_task(processed_background_reply(event, user_text))
 
-# 💬 GLOBAL TALK RESPONDER ENGINE (၇ ကြောင်းမြောက်တိုင်း စကားဝင်ပြောမည့် စနစ်)
 @bot1.on(events.NewMessage(incoming=True))
 async def global_talk_counter_handler(event):
     global group_msg_counters, GLOBAL_TALK, GLOBAL_TALK_INTERVAL
@@ -919,7 +929,6 @@ async def global_talk_counter_handler(event):
     chat_id = event.chat_id
     group_msg_counters[chat_id] = group_msg_counters.get(chat_id, 0) + 1
     
-    # Group ထဲတွင် စကားပြောသံ ၇ ကြောင်းပြည့်တိုင်း Auto ဝင်ရောက်တုံ့ပြန်ခြင်း
     if group_msg_counters[chat_id] >= GLOBAL_TALK_INTERVAL:
         group_msg_counters[chat_id] = 0
         user_text = event.text.strip()
@@ -942,3 +951,4 @@ if __name__ == '__main__':
         asyncio.run(start_system())
     except (KeyboardInterrupt, SystemExit):
         print("System Stopped Safely.")
+
