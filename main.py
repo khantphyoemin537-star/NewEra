@@ -1303,7 +1303,6 @@ async def save_morgan_bulk_messages(event):
     if documents:
         await morgan_col.insert_many(documents)
         await event.reply(bq(f"Morgan စာသားအသစ် ({len(documents)} ခု) သိမ်းပြီးပါပြီ။"))
-
 # ====================================================================================
 # 👈 [ADVANCED & HIGH-SPEED] REPLY SAVE AUTO RESPONDER SYSTEM (NON-BLOCKING)
 # ====================================================================================
@@ -1318,24 +1317,47 @@ async def turn_on_reply_save_match(event):
     if interval_arg:
         REPLY_INTERVAL = int(interval_arg)
         
-    await event.reply(bq(f"🎯 စာလိုက်ထောက်စနစ် (Auto-Responder) ကို Group အားလုံးအတွက် ဖွင့်လိုက်ပါသေးတယ်ယခုမှစ၍ {REPLY_INTERVAL} ကြောင်းမြောက်တိုင်း တုံ့ပြန်ပေးပါမယ် ဘရို!"), parse_mode='html')
+    ktr_on_text = (
+        f"🌌 <b>𝘼𝙐𝙏𝙊-𝙍𝙀𝙎𝙋𝙊𝙉𝘿𝙀𝙍: 𝘼𝘾𝙏𝙄𝙑𝘼𝙏𝙀𝘿</b>\n"
+        f"🛸 ───────────────────\n"
+        f"🎯 Target Tracking Matrix engaged across all sectors.\n"
+        f"⚡ Core system will intervene every <code>{REPLY_INTERVAL}</code> messages, Chief!\n"
+        f"🪐 ───────────────────"
+    )
+    await event.reply(bq(ktr_on_text), parse_mode='html')
 
 @bot1.on(events.NewMessage(pattern=r'^/ktrr$'))
 async def turn_off_reply_save_match(event):
     global IS_REPLY_ACTIVE
     if event.sender_id != OWNER_ID: return
+    
     IS_REPLY_ACTIVE = False
-    await event.reply(bq("⛔ စာလိုက်ထောက်စနစ်ကို ပိတ်လိုက်ပါပြီ မောလို့ နားဦးမယ်"), parse_mode='html')
+    ktr_off_text = (
+        f"🌌 <b>𝘼𝙐𝙏𝙊-𝙍𝙀𝙎𝙋𝙊𝙉𝘿𝙀𝙍: 𝘿𝙀𝘼𝘾𝙏𝙄𝙑𝘼𝙏𝙀𝘿</b>\n"
+        f"🛸 ───────────────────\n"
+        f"⛔ System disengaged. Auto-response matrix entering offline sleep mode.\n"
+        f"🪐 ───────────────────"
+    )
+    await event.reply(bq(ktr_off_text), parse_mode='html')
 
-async def processed_background_reply(event, user_text):
+# 🛠️ ပြင်ဆင်ထားသော စကားပြောစနစ် (as_reply ခွဲခြားမှု Matrix)
+async def processed_background_reply(event, user_text, as_reply=True):
     chat_entity = await event.get_input_chat()
     smart_reply = await fetch_optimized_smart_reply(user_text)
     
     if smart_reply:
         try:
+            # Bot က စာရိုက်နေသလိုပြသမည့် အပိုင်း
             async with bot1.action(chat_entity, 'typing'):
                 await asyncio.sleep(random.uniform(1.0, 2.2))
-            await event.reply(bq(smart_reply), parse_mode='html')
+                
+            if as_reply:
+                # /ktr စနစ်အတွက် စာကို Reply လိုက်ထောက်မည်
+                await event.reply(bq(smart_reply), parse_mode='html')
+            else:
+                # စကားဝင်ပြော (GLOBAL_TALK) အတွက် Reply မထောက်ဘဲ Text အဖြစ်ပဲ သန့်သန့်ထွက်မည်
+                await event.respond(bq(smart_reply), parse_mode='html')
+                
         except errors.rpcerrorlist.FloodWaitError as e:
             await asyncio.sleep(e.seconds)
         except Exception:
@@ -1357,7 +1379,8 @@ async def reply_save_counter_handler(event):
     if reply_msg_counters[chat_id] >= REPLY_INTERVAL:
         reply_msg_counters[chat_id] = 0 
         user_text = event.text.strip()
-        asyncio.create_task(processed_background_reply(event, user_text))
+        # /ktr ဖြစ်လို့ as_reply=True ပေးထားသည်
+        asyncio.create_task(processed_background_reply(event, user_text, as_reply=True))
 
 @bot1.on(events.NewMessage(incoming=True))
 async def global_talk_counter_handler(event):
@@ -1375,7 +1398,8 @@ async def global_talk_counter_handler(event):
     if group_msg_counters[chat_id] >= GLOBAL_TALK_INTERVAL:
         group_msg_counters[chat_id] = 0
         user_text = event.text.strip()
-        asyncio.create_task(processed_background_reply(event, user_text))
+        # စကားဝင်ပြောစနစ် ဖြစ်လို့ Reply မထောက်စေရန် as_reply=False ပြောင်းလဲထားသည်
+        asyncio.create_task(processed_background_reply(event, user_text, as_reply=False))
 
 # ==========================================
 # 🚀 START SYSTEM
@@ -1394,4 +1418,3 @@ if __name__ == '__main__':
         asyncio.run(start_system())
     except (KeyboardInterrupt, SystemExit):
         print("System Stopped Safely.")
-
