@@ -997,10 +997,10 @@ async def protection_logic(event):
                 mention = f"<a href='tg://user?id={sender_id}'>{escape_html(sender.first_name)}</a>"
                 await event.respond(bq(f"ဟိတ်.. {mention} link မပို့နဲ့ bro/sis မင်း link ကို ငါဖျက်လိုက်ပြီ"), parse_mode='html')
             except: pass
-
 # ====================================================================================
-# 🎵 ADVANCED MULTIMEDIA PLAY & TRACKING SYSTEM (Modern Cyber Design)
+# 🎵 ADVANCED MULTIMEDIA PLAY & TRACKING SYSTEM (Per-User Multi-Session Matrix)
 # ====================================================================================
+# Data Structure: {(chat_id, user_id): {"msg_id": msg_id, "songs": [...]}}
 play_blocks = {}  
 
 @bot1.on(events.NewMessage(pattern=r'^/play(?:\s+(.*))?'))
@@ -1013,24 +1013,27 @@ async def play_response(event):
 
     chat_id = event.chat_id
     sender = await event.get_sender()
+    user_id = event.sender_id
     
     if sender and getattr(sender, 'username', None):
         mention = f"@{sender.username}"
     else:
         first_name = getattr(sender, 'first_name', None) or "User"
-        mention = f"<a href='tg://user?id={sender.id}'>{escape_html(first_name)}</a>"
+        mention = f"<a href='tg://user?id={user_id}'>{escape_html(first_name)}</a>"
 
-    if chat_id not in play_blocks:
-        play_blocks[chat_id] = {"msg_id": None, "songs": []}
+    # 🔑 Unique Tuple Key: Group ID နဲ့ User ID ကို ပေါင်းစပ်ပြီး Session ခွဲထုတ်ခြင်း (လုံးဝ မရောစေရပါ)
+    session_key = (chat_id, user_id)
+
+    if session_key not in play_blocks:
+        play_blocks[session_key] = {"msg_id": None, "songs": []}
 
     current_song_entry = {"title": song_title.strip(), "by": mention}
-    play_blocks[chat_id]["songs"].append(current_song_entry)
+    play_blocks[session_key]["songs"].append(current_song_entry)
 
     playlist_text = ""
-    for index, s in enumerate(play_blocks[chat_id]["songs"], start=1):
+    for index, s in enumerate(play_blocks[session_key]["songs"], start=1):
         playlist_text += f"{index} 💿 <code>/play {escape_html(s['title'])}</code> — {s['by']}\n"
 
-    # 🌐 Owner Fullname ကို Telegram Account ကနေ အမြဲ Live Update ဖြစ်နေအောင် ဆွဲယူခြင်း
     try:
         owner_entity = await bot1.get_entity(OWNER_ID)
         first = owner_entity.first_name or ""
@@ -1038,31 +1041,36 @@ async def play_response(event):
         owner_fullname = f"{first} {last}".strip()
         owner_fullname = escape_html(owner_fullname)
     except Exception:
-        owner_fullname = "Khant Thu Rain" # တစ်ခုခုကြောင့် ဆွဲမရရင် သုံးမယ့် Fallback Name
+        owner_fullname = "Khant Thu Rain" 
 
-    # 🌌 ခေတ်မီဆန်းသစ်တဲ့ Emoji & Layout ဒီဇိုင်းအသစ်
     msg_template = (
         f"🌌 <b>{owner_fullname} Multimedia System</b>\n"
         f"🛸 ───────────────────\n"
         f"💿 <b>Now Spinning:</b> <code>{escape_html(song_title.strip())}</code>\n"
         f"✨ <b>Requested By:</b> {mention}\n\n"
-        f"💎 <b>Recent Playlist (Max 10):</b>\n"
+        f"💎 <b>Your Recent Playlist (Max 30):</b>\n"
         f"{playlist_text}"
+        f"─────────────────────\n"
+        f"💡 <i>ဒါက မင်း ဖွင့်တဲ့ song 30 ပုဒ်အထိ သိမ်းထားပေးပြီး /play xxxကို ထိတာနဲ့ copyဖြစ်ပြီး နောက်ကျ အဆင်သင့်နားထောင်နိုင်ရန် အတွက် မင်းသီချင်းတွေပြီးတဲ့အခါဒါကိုsaved message မှာ သိမ်းထားလိုက်</i>\n"
         f"🪐 ───────────────────"
     )
 
-    inline_buttons = [[Button.url("Join Our Group 🌐", "https://t.me/Comeback_BoD")]]
+    # 🎛️ Inline Buttons Setup (User ID ကို Callback Data ထဲ ထည့်သွင်းထားသည်)
+    inline_buttons = [
+        [Button.url("Join Our Community 🌐", "https://t.me/Comeback_BoD")],
+        [Button.inline("songsစုထားမယ် နှိပ် 📥", data=f"save_pl_{user_id}")]
+    ]
 
     try:
-        last_msg_id = play_blocks[chat_id]["msg_id"]
+        last_msg_id = play_blocks[session_key]["msg_id"]
         
         if last_msg_id:
             try:
                 await bot1.edit_message(
-                    chat_id, 
-                    last_msg_id, 
-                    bq(msg_template), 
-                    parse_mode='html', 
+                    entity=chat_id,
+                    message=last_msg_id,
+                    text=bq(msg_template),
+                    parse_mode='html',
                     buttons=inline_buttons
                 )
                 try: await event.delete()
@@ -1076,15 +1084,64 @@ async def play_response(event):
                 parse_mode='html', 
                 buttons=inline_buttons
             )
-            play_blocks[chat_id]["msg_id"] = new_msg.id
+            play_blocks[session_key]["msg_id"] = new_msg.id
             try: await event.delete()
             except: pass
 
-        if len(play_blocks[chat_id]["songs"]) >= 10:
-            play_blocks[chat_id] = {"msg_id": None, "songs": []}
+        if len(play_blocks[session_key]["songs"]) >= 30:
+            play_blocks[session_key] = {"msg_id": None, "songs": []}
 
     except Exception as e:
         print(f"Multimedia Play System Error: {e}")
+
+
+# ====================================================================================
+# 📥 INLINE CALLBACK FOR FREEZING & SAVING THE PLAYLIST (Per-User Validation)
+# ====================================================================================
+@bot1.on(events.CallbackQuery(pattern=r'^save_pl_(\d+)$'))
+async def close_playlist_callback(event):
+    chat_id = event.chat_id
+    clicker_id = event.sender_id
+    target_user_id = int(event.pattern_match.group(1))
+    
+    # 🛡️ Anti-Interference Security: မိမိဖွင့်ထားတဲ့ Playlist ကိုပဲ ပိတ်ခွင့်ရှိစေရန် စစ်ဆေးခြင်း
+    if clicker_id != target_user_id:
+        return await event.answer("❌ ဒါက မင်းရဲ့ Playlist မဟုတ်ပါဘူး! မင်းကိုယ်ပိုင် /play စာရင်းကိုပဲ ပိတ်လို့ရပါမယ်။", alert=True)
+        
+    session_key = (chat_id, target_user_id)
+    
+    try:
+        msg = await event.get_message()
+        current_text = msg.text if msg else ""
+        
+        frozen_buttons = [
+            [Button.url("Join Our Community 🌐", "https://t.me/Comeback_BoD")],
+            [Button.inline("🔒 Playlist Locked & Ready to Save", data="playlist_frozen_done")]
+        ]
+        
+        if current_text:
+            await event.edit(
+                text=current_text,
+                parse_mode='html',
+                buttons=frozen_buttons
+            )
+        
+        # 🔄 ထို User ရဲ့ Session ကို Memory ပေါ်ကနေ အပြီးသတ် ဖျက်ထုတ်ပေးခြင်း (RAM လုံးဝမပွစေရန်)
+        if session_key in play_blocks:
+            del play_blocks[session_key]
+            
+        await event.answer(
+            "🔒 Your Playlist Session Closed!\n\nဒီသီချင်းစာရင်းကို Saved Messages ထဲ Forward လုပ်ပြီး အလွယ်တကူ သိမ်းဆည်းလိုက်ပါ Chief!", 
+            alert=True
+        )
+    except Exception as e:
+        print(f"Callback Error: {e}")
+        await event.answer("Error closing session.", alert=False)
+
+@bot1.on(events.CallbackQuery(pattern=r'^playlist_frozen_done$'))
+async def playlist_frozen_done_callback(event):
+    await event.answer("ဒီ Playlist ကို ပိတ်ပြီးပါပြီ။ Saved Messages ထဲ Forward လုပ်ပြီး သိမ်းနိုင်ပါတယ်ဗျာ။", alert=False)
+
 
 @bot1.on(events.NewMessage(pattern=r'^/b(?:@\w+)?$'))
 async def bot_bully(event):
