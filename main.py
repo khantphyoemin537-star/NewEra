@@ -251,23 +251,6 @@ async def fetch_optimized_smart_reply(user_text):
         except Exception:
             reply_text = None
 
-    # ⏳ FALLBACK 2: `morgan_col` မှ ဆွဲယူခြင်း
-    if not reply_text:
-        try:
-            morgan_cursor = morgan_col.aggregate([{"$sample": {"size": 1}}])
-            morgan_docs = await morgan_cursor.to_list(length=1)
-            if morgan_docs and morgan_docs[0].get("text"):
-                reply_text = morgan_docs[0]["text"]
-        except Exception:
-            reply_text = None
-
-    # ⏳ FALLBACK 3: Default Phrases
-    if not reply_text:
-        default_phrases = ["ဟုတ်ပဗျာ", "အေးပါဗျာ", "ဒါနဲ့လေ...", "ဟီးဟီး", "ဟုတ်လား Chief", "အော်... အင်း"]
-        reply_text = random.choice(default_phrases)
-
-    return reply_text
-
 
 # ====================================================================================
 # 🛡️ SYSTEM COMMANDS & HANDLERS
@@ -318,11 +301,11 @@ async def welcome_goodbye(event):
                             parse_mode='html',
                             file=media_file,
                             buttons=[
-                                [Button.url("Bot ဖြင့် Broadcasting အပ်ရန်", f"tg://user?id={OWNER_ID}")],
+                                [Button.url("Bot ဖြင့် Broadcasting အပ်ရန်", f"t.me/Hello_Im_DexterMorgan")],
                                 [Button.url("ကျွန်ုပ်တို့Groupသို့ဝင်ရန်", "https://t.me/Comeback_BoD")]
                             ]
                         )
-        elif event.user_left or event.user_kicked:
+        elif event.user_left:
             u = await bot1.get_entity(event.user_id)
             u_mention = f"<a href='tg://user?id={u.id}'>{escape_html(u.first_name)}</a>"
             await bot1.send_message(event.chat_id, bq(f"ထွက်သွားလိုက်ပါသေးတယ်.{u_mention}!!"), parse_mode='html')
@@ -330,112 +313,10 @@ async def welcome_goodbye(event):
     except Exception as e:
         print(f"Welcome/Goodbye Error: {e}")
 
-# ==========================================
-# 🧠 CHATBOT TRAINING SYSTEM (TELETHON)
-# ==========================================
-TRAINING_ENABLED = True
-
-@bot1.on(events.NewMessage(pattern=r'^/ron$'))
-async def turn_on_training(event):
-    global TRAINING_ENABLED
-    if event.sender_id != OWNER_ID: return
-    TRAINING_ENABLED = True
-    await event.reply(bq("✅ Sovereign Training Mode ကို ဖွင့်လိုက်ပါပြီ။\nယခုမှစ၍ /r ဖြင့် စာသင်နိုင်ပါသည်။"), parse_mode='html')
-
-@bot1.on(events.NewMessage(pattern=r'^/roff$'))
-async def turn_off_training(event):
-    global TRAINING_ENABLED
-    if event.sender_id != OWNER_ID: return
-    TRAINING_ENABLED = False
-    await event.reply(bq("⛔ Sovereign Training Mode ကို ปိတ်လိုက်ပါပြီ။\nယခုတွင် /r Command အသုံးပြု၍ မရနိုင်တော့ပါ။"), parse_mode='html')
-
-@bot1.on(events.NewMessage(pattern=r'^/r(\s+.*)?$'))
-async def train_bot(event):
-    global TRAINING_ENABLED
-    if not TRAINING_ENABLED:
-        await event.reply(bq("⚠️ လက်ရှိတွင် Owner မှ Chatbot Training Mode ကို ပိတ်ထားပါတယ်ဗျာ။"), parse_mode='html')
-        return
-    if not event.is_reply:
-        await event.reply(bq("❌ အသုံးပြုပုံ မှားယွင်းနေပါသည်။\nအဖြေများပါသော စာသားကို Reply ပြန်ပြီး `/r [မေးခွန်း]` ဟု ရိုက်ပေးပါ။"), parse_mode='html')
-        return
-    args = event.pattern_match.group(1)
-    if not args:
-        await event.reply(bq("❌ မေးခွန်း (Keyphrase) ထည့်သွင်းပေးရန် လိုအပ်ပါသည်။"), parse_mode='html')
-        return
-        
-    keyphrase = args.strip().lower()
-    reply_msg = await event.get_reply_message()
-    if not reply_msg or not reply_msg.text:
-        await event.reply(bq("❌ စာသား (Text) ပါဝင်သော Message ကိုသာ သင်ပေး၍ ရပါမည်။"), parse_mode='html')
-        return
-
-    new_responses = re.findall(r'"([^"]*)"', reply_msg.text)
-    if not new_responses:
-        await event.reply(bq("❌ အဖြေများကို မျက်တောင်အဖွင့်အပိတ် \" \" ထဲတွင် တစ်ကြောင်းချင်းစီ ထည့်ပေးပါဗျာ။"), parse_mode='html')
-        return
-
-    existing_doc = await ans_col.find_one({"keyphrase": keyphrase})
-    if existing_doc:
-        existing_responses = existing_doc.get("responses", [])
-        updated_responses = list(set(existing_responses + new_responses))
-        await ans_col.update_one({"keyphrase": keyphrase}, {"$set": {"responses": updated_responses}})
-        action_msg = f"အဖြေအသစ်များကို ပေါင်းထည့်လိုက်ပါပြီ။ (စုစုပေါင်းအဖြေ: {len(updated_responses)} ခု)"
-    else:
-        await ans_col.insert_one({"keyphrase": keyphrase, "responses": new_responses})
-        action_msg = "အစုံလိုက် အသစ်စက်စက် :)"
-
-    debug_list = "\n".join([f"• {r}" for r in new_responses])
-    await event.reply(bq(f"✨ စကားလုံးအသစ် မှတ်သားမှု အောင်မြင်သည်!\n🔑 Key: {keyphrase}\n📝 ขွဲထုတ်ရရှိသည့် အဖြေများ ({len(new_responses)} ခု):\n{debug_list}\n\n💡 {action_msg}"), parse_mode='html')
-
-# ==========================================
-# 🧹 DISMISS DELETED ADMINS SYSTEM
-# ==========================================
-@bot1.on(events.NewMessage(pattern=r'^/dismiss$'))
-async def dismiss_deleted_admins(event):
-    if not event.is_group: return await event.reply(bq("❌ ဒီ Command ကို Group များထဲတွင်သာ အသုံးပြုနိုင်ပါသည်။"), parse_mode='html')
-    if not await is_allowed(event.sender_id): return
-
-    status_msg = await event.reply("🔍 <i>Admin စာရင်းထဲရှိ Deleted Accounts များကို ရှာဖွေနေပါသည်...</i>", parse_mode='html')
-    chat_id = event.chat_id
-    deleted_admins_count = 0
-    dismissed_count = 0
-    failed_count = 0
-
-    try:
-        async for participant in event.client.iter_participants(chat_id, filter=ChannelParticipantsAdmins):
-            user = participant.user
-            if isinstance(participant, ChannelParticipantCreator): continue
-            if user.deleted:
-                deleted_admins_count += 1
-                try:
-                    await event.client.edit_admin(
-                        chat_id, user.id, change_info=False, post_messages=False, edit_messages=False,
-                        delete_messages=False, ban_users=False, invite_users=False, pin_messages=False,
-                        add_admins=False, manage_call=False
-                    )
-                    dismissed_count += 1
-                except Exception:
-                    failed_count += 1
-
-        if deleted_admins_count == 0:
-            await status_msg.edit(bq("✅ <b>စစ်ဆေးမှု ပြီးဆုံးပါပြီ။</b>\n\nဒီ Group ရဲ့ Admin စာရင်းထဲမှာ Deleted Account တစ်ခုမှ မရှိပါဘူး Chief!"), parse_mode='html')
-        else:
-            result_text = (
-                "🧹 <b>⚚ 𝘽𝙤延𝙭  - 𝘼𝘿𝙈𝙄index 𝘾𝙇𝙀𝘼𝙉𝙀𝙍</b> 🧹\n"
-                "━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"💀 <b>တွေ့ရှိရသော Deleted Admins:</b> <code>{deleted_admins_count} ဦး</code>\n"
-                f"✅ <b>အောင်မြင်စွာ ဖြုတ်ချပြီး:</b> <code>{dismissed_count} ဦး</code>\n"
-                f"❌ <b>ဖြုတ်ချ၍မရသော အရေအတွက်:</b> <code>{failed_count} ဦး</code>\n"
-                "━━━━━━━━━━━━━━━━━━━━━━━━━"
-            )
-            await status_msg.edit(bq(result_text), parse_mode='html')
-    except Exception as e:
-        await status_msg.edit(bq(f"❌ <b>Error:</b>\n<code>{e}</code>"), parse_mode='html')
-
 # 💬 AUTOMATIC CHAT RESPONDER
 @bot1.on(events.NewMessage(incoming=True))
 async def chatbot_auto_responder(event):
-    if event.is_private or not event.text or event.text.startswith(('/', '.', 'မှတ်','@')): return
+    if event.is_private or not event.text or event.text.startswith(('/', '.', 'Hey there','@')): return
     user_text = event.text.lower()
     cursor = ans_col.find()
     async for doc in cursor:
@@ -615,12 +496,10 @@ async def get_identity_matrix_handler(event):
 
     # 🌌 Premium Cyber Matrix Layout Design
     matrix_text = (
-        f"🌌 <b>𝙄𝘿𝙀𝙉𝙏𝙄𝙏𝙔 𝙈𝘼𝙏𝙍𝙄𝙓</b>\n"
-        f"🛸 ───────────────────\n"
+        f"🌌 <b>𝙄𝘿 𝙈𝘼𝙏𝙍𝙄𝙓</b>\n"
         f"👤 <b>{user_type}:</b> {mention}\n"
         f"🆔 <b>User ID:</b> <code>{target_id}</code>\n\n"
         f"{group_section}"
-        f"🪐 ───────────────────"
     )
 
     try:
@@ -659,8 +538,7 @@ async def mute_user(event):
             f"🛸 ───────────────────\n"
             f"🔇 <b>Target:</b> {mention}\n"
             f"🆔 <b>User ID:</b> <code>{target_user.id}</code>\n"
-            f"⚡ <b>Status:</b> <code>Muted / Voice Restricted</code>\n"
-            f"🪐 ───────────────────"
+            f"⚡ <b>Status:</b> <code>Muted(မြုပြီး)</code>"
         )
         
         # Unmute လုပ်နိုင်မည့် Interactive Inline Button တပ်ဆင်ခြင်း
@@ -682,11 +560,9 @@ async def unmute_user(event):
         
         unmute_text = (
             f"🌌 <b>𝙐𝙉𝙈𝙐𝙏𝙀 𝙊𝙋𝙀𝙍𝘼𝙏𝙄𝙊𝙉</b>\n"
-            f"🛸 ───────────────────\n"
             f"🔊 <b>Target:</b> {mention}\n"
             f"🆔 <b>User ID:</b> <code>{target_user.id}</code>\n"
-            f"⚡ <b>Status:</b> <code>Voice Restored / Cleared</code>\n"
-            f"🪐 ───────────────────"
+            f"⚡ <b>Status:</b> <code>Voice Restored / Cleared</code>"
         )
         await event.respond(bq(unmute_text), parse_mode='html')
     except Exception as e:
@@ -706,11 +582,9 @@ async def ban_user(event):
         
         ban_text = (
             f"🌌 <b>𝘽𝘼𝙉 𝙊𝙋𝙀𝙍𝘼𝙏𝙄𝙊𝙉</b>\n"
-            f"🛸 ───────────────────\n"
             f"🚫 <b>Target:</b> {mention}\n"
             f"🆔 <b>User ID:</b> <code>{target_user.id}</code>\n"
-            f"⚡ <b>Status:</b> <code>Exiled / Perm-Banned</code>\n"
-            f"🪐 ───────────────────"
+            f"⚡ <b>Status:</b> <code>Exiled / Perm-Banned(ဘန်းပစ်လိုက်ရှုပ်တယ်)</code>"
         )
         await event.respond(bq(ban_text), parse_mode='html')
     except Exception as e:
@@ -730,11 +604,9 @@ async def unban_user(event):
         
         unban_text = (
             f"🌌 <b>𝙐𝙉𝘽𝘼𝙉 𝙊𝙋𝙀𝙍𝘼𝙏𝙄𝙊𝙉</b>\n"
-            f"🛸 ───────────────────\n"
             f"✅ <b>Target:</b> {mention}\n"
             f"🆔 <b>User ID:</b> <code>{target_user.id}</code>\n"
-            f"⚡ <b>Status:</b> <code>Ban Lifted / Allowed to Join</code>\n"
-            f"🪐 ───────────────────"
+            f"⚡ <b>Status:</b> <code>Ban Lifted / Allowed to Join</code>"
         )
         await event.respond(bq(unban_text), parse_mode='html')
     except Exception as e:
@@ -755,11 +627,9 @@ async def kick_user(event):
         
         kick_text = (
             f"🌌 <b>𝙆𝙄𝘾𝙆 𝙊𝙋𝙀𝙍𝘼𝙏𝙄𝙊𝙉</b>\n"
-            f"🛸 ───────────────────\n"
-            f"🥾 <b>Target:</b> {mention}\n"
+            f" <b>Target:</b> {mention}\n"
             f"🆔 <b>User ID:</b> <code>{target_user.id}</code>\n"
-            f"⚡ <b>Status:</b> <code>Removed / Kicked from Chat</code>\n"
-            f"🪐 ───────────────────"
+            f"⚡ <b>Status:</b> <code>Removed / Kicked from Chat</code>"
         )
         await event.respond(bq(kick_text), parse_mode='html')
     except Exception as e:
@@ -793,10 +663,8 @@ async def inline_unmute_callback(event):
         # မူရင်း Mute စာသားကို Unmute အောင်မြင်ကြောင်း Live ပြောင်းလဲ (Edit) ပေးလိုက်ခြင်း
         updated_text = (
             f"🌌 <b>𝙈𝙐𝙏𝙀 𝙎𝙔𝙎𝙏𝙀𝙈 𝙐𝙋𝘿𝘼𝙏𝙀</b>\n"
-            f"🛸 ───────────────────\n"
             f"🔊 {mention} has been <b>Unmuted</b> via administrative console.\n"
-            f"⚡ <b>Status:</b> <code>Restrictions Disintegrated</code>\n"
-            f"🪐 ───────────────────"
+            f"⚡ <b>Status:</b> <code>Restrictions Disintegrated</code>"
         )
         
         await event.edit(bq(updated_text), parse_mode='html', buttons=None) # ခလုတ်ကိုပါ တစ်ခါတည်း ဖြုတ်ပစ်မည်
@@ -843,18 +711,15 @@ async def tag_admins(event):
         
         # 🌌 English Cyber Font & Galactic Layout Design
         adm_signal_text = (
-            f"🌌 <b>𝘼𝘿𝙈𝙄𝙉 𝘼𝙎𝙎𝙀𝙈𝘽𝙇𝙔 𝙎𝙄𝙂𝙉𝘼𝙇</b>\n"
-            f"🛸 ───────────────────────\n"
             f"📢 <b>Broadcast:</b> <code>{escape_html(text)}</code>\n\n"
+            f"🌌 <b>𝘼𝘿𝙈𝙄𝙉 𝘼𝙎𝙎𝙀𝙈𝘽𝙇𝙔 𝙎𝙄𝙂𝙉𝘼𝙇</b>\n"
             f"🛡️ <b>Active Officers:</b>\n"
-            f"{compact_admin_list}\n"
-            f"🪐 ───────────────────────"
+            f"{compact_admin_list}"
         )
         
         await event.respond(bq(adm_signal_text), parse_mode='html')
     except Exception as e:
         print(f"Admin Tag System Error: {e}")
-
 
 @bot1.on(events.NewMessage(pattern=r'^/addallow(?:@\w+)?$'))
 async def add_allow(event):
@@ -893,9 +758,7 @@ async def broadcast(event):
     # 🌌 စတင်ကြောင်းပြသမည့် Alert (English Cyber Font + HTML Parse Mode)
     init_text = (
         f"🌌 <b>𝘽𝙍𝙊𝘼𝘿𝘾𝘼𝙎𝙏 𝙎𝙔𝙎𝙏𝙀𝙈 𝙄𝙉𝙄𝙏𝙄𝘼𝙏𝙀𝘿</b>\n"
-        f"🛸 ───────────────────\n"
-        f"⚡ <b>Transmission:</b> <code>Deploying signals to all sectors...</code>\n"
-        f"🪐 ───────────────────"
+        f"⚡ <b>Transmission:</b> <code>Deploying signals to all sectors...</code>"
     )
     status_msg = await event.respond(bq(init_text), parse_mode='html')
     
@@ -917,10 +780,8 @@ async def broadcast(event):
     # 🌌 Broadcast ပို့ဆောင်ပြီးစီးကြောင်း ပြသသည့် Final Report (HTML Parse Mode ဖြင့် စာလုံးအလှများ အလုပ်လုပ်စေသည်)
     report_text = (
         f"🌌 <b>𝘽𝙍𝙊𝘼𝘿𝘾𝘼𝙎𝙏 𝙏𝙍𝘼𝙉𝙎𝙈𝙄𝙎𝙎𝙄𝙊𝙉 𝘾𝙊𝙈𝙋𝙇𝙀𝙏𝙀𝘿</b>\n"
-        f"🛸 ───────────────────\n"
         f"✅ <b>Success Sectors:</b> <code>{success}</code>\n"
-        f"❌ <b>Failed Sectors:</b>  <code>{fail}</code>\n"
-        f"🪐 ───────────────────"
+        f"❌ <b>Failed Sectors:</b>  <code>{fail}</code>"
     )
     await status_msg.edit(bq(report_text), parse_mode='html')
     
@@ -932,7 +793,7 @@ async def protection_logic(event):
     text, chat_id, sender_id = event.text.strip(), event.chat_id, event.sender_id
     sender = await event.get_sender()
 
-    if re.search(r'/harem(@\w+)?', text) or re.search(r'/waifu(@\w+)?', text):
+    if re.search(r'/harrrem(@\w+)?', text) or re.search(r'/waaaifu(@\w+)?', text):
         try:
             mention = f"<a href='tg://user?id={sender_id}'>{escape_html(sender.first_name)}</a>"
             cmd_type = "harem" if "harem" in text.lower() else "waifu"
@@ -954,7 +815,7 @@ async def protection_logic(event):
     if text:
         text_lower = text.lower()  # စာလုံးအသေးအကြီး အကုန်မိစေရန် lower ပြောင်းခြင်း
         BIO_KEYWORDS = [
-            "bio", "biography", "biolink", "bio-link", "b-i-o", "tg bio", 
+            "bio", "b i o", "biolink", "bio-link", "b-i-o", "tg bio", 
             "ဘိုင်အို", "ဘိုင်-အို", "ဘိုင်-o", "ဘီအိုင်အို", "ဘိုင်အိုလင့်", "ဘိုင်အိုလင့်ခ်"
         ]
 
@@ -970,10 +831,8 @@ async def protection_logic(event):
                 # English Font အလှနှင့် လန်းဆန်းသော Layout ဒီဇိုင်း
                 warn_text = (
                     f"⚠️ <b>𝘽𝙄𝙊 𝙎𝙔𝙎𝙏𝙀𝙈 𝘼𝙇𝙀𝙍𝙏</b>\n"
-                    f"🛸 ───────────────────\n"
                     f"Hey {mention}, discussing or sharing unauthorized <b>Biolink</b> content is restricted here.\n\n"
-                    f"⚡ <b>Status:</b> <code>Message Disintegrated</code>\n"
-                    f"🪐 ───────────────────"
+                    f"⚡ <b>Status:</b> <code>Message Disintegrated</code>"
                 )
                 
                 # Reply စာကို မဖျက်ဘဲ ချန်ထားမည်
@@ -1044,15 +903,12 @@ async def play_response(event):
         owner_fullname = "Khant Thu Rain" 
 
     msg_template = (
-        f"🌌 <b>{owner_fullname} Multimedia System</b>\n"
-        f"🛸 ───────────────────\n"
+        f"🌌 <b>{owner_fullname} Multimedia System</b>\n
         f"💿 <b>Now Spinning:</b> <code>{escape_html(song_title.strip())}</code>\n"
         f"✨ <b>Requested By:</b> {mention}\n\n"
         f"💎 <b>Your Recent Playlist (Max 30):</b>\n"
         f"{playlist_text}"
-        f"─────────────────────\n"
-        f"💡 <i>ဒါက မင်း ဖွင့်တဲ့ song 30 ပုဒ်အထိ သိမ်းထားပေးပြီး /play xxxကို ထိတာနဲ့ copyဖြစ်ပြီး နောက်ကျ အဆင်သင့်နားထောင်နိုင်ရန် အတွက် မင်းသီချင်းတွေပြီးတဲ့အခါဒါကိုsaved message မှာ သိမ်းထားလိုက်</i>\n"
-        f"🪐 ───────────────────"
+        f"💡 <i>ဒါက မင်း ဖွင့်တဲ့ song 30 ပုဒ်အထိ သိမ်းထားပေးပြီး /play xxxကို ထိတာနဲ့ copyဖြစ်ပြီး နောက်ကျ အဆင်သင့်နားထောင်နိုင်ရန် အတွက် မင်းသီချင်းတွေပြီးတဲ့အခါဒါကိုsaved message မှာ သိမ်းထားလိုက်</i>"
     )
 
     # 🎛️ Inline Buttons Setup (User ID ကို Callback Data ထဲ ထည့်သွင်းထားသည်)
@@ -1093,7 +949,6 @@ async def play_response(event):
 
     except Exception as e:
         print(f"Multimedia Play System Error: {e}")
-
 
 # ====================================================================================
 # 📥 INLINE CALLBACK FOR FREEZING & SAVING THE PLAYLIST (Per-User Validation)
@@ -1224,9 +1079,7 @@ async def turn_on_talking(event):
     
     on_text = (
         f"🌌 <b>𝙑𝙊𝘾𝘼𝙇 𝙋𝙍𝙊𝙏𝙊𝘾𝙊𝙇: 𝘼𝘾𝙏𝙄𝙑𝘼𝙏𝙀𝘿</b>\n"
-        f"🛸 ───────────────────\n"
-        f"🔊 Smart Reply Engine ကို Sector အားလုံးမှာ <b>စကားဝင်ပြောဖို့</b> အသက်သွင်းလိုက်ပါပြီ Chief!\n"
-        f"🪐 ───────────────────"
+        f"🔊 Smart Reply Engine ကို Sector အားလုံးမှာ <b>စကားဝင်ပြောဖို့</b> အသက်သွင်းလိုက်ပါပြီ Chief!"
     )
     await event.reply(bq(on_text), parse_mode='html')
 
@@ -1239,10 +1092,7 @@ async def turn_off_talking(event):
     GLOBAL_TALK = False
     
     off_text = (
-        f"🌌 <b>𝙑𝙊𝘾𝘼𝙇 𝙋𝙍𝙊𝙏𝙊𝘾𝙊𝙇: 𝘿𝙀𝘼𝘾𝙏𝙄𝙑𝘼𝙏𝙀𝘿</b>\n"
-        f"🛸 ───────────────────\n"
-        f"🔇 Smart Reply Engine ကို Absolute <b>Stealth Mode</b> ပြောင်းပြီး စကားပိတ်လိုက်ပါပြီ!\n"
-        f"🪐 ───────────────────"
+        f"🔇 Smart Reply Engine ကို Absolute <b>Stealth Mode</b> ပြောင်းပြီး စကားပိတ်လိုက်ပါပြီ!"
     )
     await event.reply(bq(off_text), parse_mode='html')
 
@@ -1295,11 +1145,10 @@ async def foreign_language_filter_handler(event):
             # English လို ဒီဇိုင်းအလန်းစား Alert Text ပုံစံ ပြောင်းလဲထားခြင်း
             warn_text = (
                 f"⚠️ <b>SYSTEM SECURITY ALERT</b>\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"Hey {mention}, foreign languages/scripts are strictly prohibited in this sector.\n"
-                f"Only <b>Burmese, English</b> and <b>Numbers</b> are allowed.\n\n"
-                f"⚡ <b>Action:</b> <code>Message Vaporized</code>"
-            )
+                f"Only <b>Burmese,English</b> and <b>Numbers</b> are allowed.\n\n"
+                f"⚡ <b>လုပ်ဆောင်ချက်:</b> <code>မြန်မာ,Engနှစ်မျိုးသာသုံးပြီး messageပို့လို့ရသည့်အတွက် တခြားဘာသာစကား messageကိုဖျက်ချလိုက်ခြင်း</code>"
+        
             
             # သတိပေးစာအား Group ထဲတွင် အမြဲကျန်နေစေရန် respond သာလုပ်ပြီး ပြန်မဖျက်တော့ပါ
             await event.respond(bq(warn_text), parse_mode='html')
@@ -1347,20 +1196,6 @@ async def channel_forward_filter_handler(event):
                 print(f"Channel Forward Filter Error: {e}")
 
 # ====================================================================================
-# 🎭 MORGAN AUTOMATIC TALK SYSTEM
-# ====================================================================================
-@bot1.on(events.NewMessage(incoming=True))
-async def save_morgan_bulk_messages(event):
-    global TRAINING_ENABLED_MORGAN
-    if not event.is_private or event.sender_id != OWNER_ID or event.text.startswith('/'): return
-    if not TRAINING_ENABLED_MORGAN: return
-    new_responses = re.findall(r'"([^"]*)"', event.text)
-    if not new_responses: return
-    documents = [{"text": r.strip()} for r in new_responses if r.strip()]
-    if documents:
-        await morgan_col.insert_many(documents)
-        await event.reply(bq(f"Morgan စာသားအသစ် ({len(documents)} ခု) သိမ်းပြီးပါပြီ။"))
-# ====================================================================================
 # 👈 [ADVANCED & HIGH-SPEED] REPLY SAVE AUTO RESPONDER SYSTEM (NON-BLOCKING)
 # ====================================================================================
 
@@ -1375,11 +1210,9 @@ async def turn_on_reply_save_match(event):
         REPLY_INTERVAL = int(interval_arg)
         
     ktr_on_text = (
-        f"🌌 <b>𝘼𝙐𝙏𝙊-𝙍𝙀𝙎𝙋𝙊𝙉𝘿𝙀𝙍: 𝘼𝘾𝙏𝙄𝙑𝘼𝙏𝙀𝘿</b>\n"
-        f"🛸 ───────────────────\n"
+        f"🌌 <b>စာလိုက်ထောက် စကားဝင်ပြောမယ့် mood:𝘼𝘾𝙏𝙄𝙑𝘼𝙏𝙀𝘿</b>\n"
         f"🎯 Target Tracking Matrix engaged across all sectors.\n"
-        f"⚡ Core system will intervene every <code>{REPLY_INTERVAL}</code> messages, Chief!\n"
-        f"🪐 ───────────────────"
+        f"⚡ Core system will intervene every <code>{REPLY_INTERVAL}</code> messages, Chief!"
     )
     await event.reply(bq(ktr_on_text), parse_mode='html')
 
@@ -1390,10 +1223,7 @@ async def turn_off_reply_save_match(event):
     
     IS_REPLY_ACTIVE = False
     ktr_off_text = (
-        f"🌌 <b>𝘼𝙐𝙏𝙊-𝙍𝙀𝙎𝙋𝙊𝙉𝘿𝙀𝙍: 𝘿𝙀𝘼𝘾𝙏𝙄𝙑𝘼𝙏𝙀𝘿</b>\n"
-        f"🛸 ───────────────────\n"
-        f"⛔ System disengaged. Auto-response matrix entering offline sleep mode.\n"
-        f"🪐 ───────────────────"
+        f"⛔ System disengaged. Auto-response matrix entering offline sleep mode."
     )
     await event.reply(bq(ktr_off_text), parse_mode='html')
 
