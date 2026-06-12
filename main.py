@@ -903,7 +903,7 @@ async def play_response(event):
         owner_fullname = "Khant Thu Rain" 
 
     msg_template = (
-        f"🌌 <b>{owner_fullname} Multimedia System</b>\n
+        f"🌌 <b>{owner_fullname} Multimedia System</b>\n"
         f"💿 <b>Now Spinning:</b> <code>{escape_html(song_title.strip())}</code>\n"
         f"✨ <b>Requested By:</b> {mention}\n\n"
         f"💎 <b>Your Recent Playlist (Max 30):</b>\n"
