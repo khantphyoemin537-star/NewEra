@@ -830,11 +830,11 @@ async def protection_logic(event):
                 
                 # English Font အလှနှင့် လန်းဆန်းသော Layout ဒီဇိုင်း
                 warn_text = (
-                    f"⚠️ <b>𝘽𝙄𝙊 𝙎𝙔𝙎𝙏𝙀𝙈 𝘼𝙇𝙀𝙍𝙏</b>\n"
-                    f"Hey {mention}, discussing or sharing unauthorized <b>Biolink</b> content is restricted here.\n\n"
-                    f"⚡ <b>Status:</b> <code>Message Disintegrated</code>"
-                )
-                
+    f"⚠️ <b>𝘽𝙄𝙊 𝙎𝙔𝙎𝙏𝙀𝙈 𝘼𝙇𝙀𝙍𝙏</b>\n"
+    f"Hey {mention}, discussing or sharing unauthorized <b>Biolink</b> content is restricted here.\n\n"
+    f"⚡ <b>Status:</b> <blockquote expandable>Message Disintegrated 🗑️</blockquote>"
+)
+             
                 # Reply စာကို မဖျက်ဘဲ ချန်ထားမည်
                 await event.respond(bq(warn_text), parse_mode='html')
                 return 
