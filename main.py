@@ -107,8 +107,8 @@ TRAINING_ENABLED_MORGAN = False
 group_msg_counters = {}
 
 IS_REPLY_ACTIVE = False              
-REPLY_INTERVAL = 5                   
-GLOBAL_TALK_INTERVAL = 7             
+REPLY_INTERVAL = 4                   
+GLOBAL_TALK_INTERVAL = 6            
 reply_msg_counters = {}              
 
 # ==========================================
@@ -192,7 +192,7 @@ async def fetch_optimized_smart_reply(user_text):
                 ]}
             ]
         }},
-        # 🎯 စကားလုံးအရှည်ပေါ်မူတည်ပြီး Weight Score တွက်ချက်ခြင်း (ပိုရှည်ပြီး ကွက်တိကျလေ Score မြင့်လေဖြစ်သည်)
+        # 🎯 စကားလုံးအရှည်ပေါ်မူတည်ပြီး Weight Score တွက်ချက်ခြင်း
         {"$addFields": {
             "weight": {
                 "$max": [
@@ -202,9 +202,9 @@ async def fetch_optimized_smart_reply(user_text):
                 ]
             }
         }},
-        # 🔝 Weight အမြင့်ဆုံး (အကိုက်ညီဆုံးစကားလုံး) ကို ထိပ်ဆုံးသို့ နေရာရွှေ့ပေးခြင်း
+        # 🔝 Weight အမြင့်ဆုံးကို ထိပ်ဆုံးသို့ နေရာရွှေ့ပေးခြင်း
         {"$sort": {"weight": -1}},
-        {"$limit": 10}  # အကောင်းဆုံး ကိုက်ညီမှုရှိသည့် ထိပ်ဆုံး ၁၀ ခုကိုသာ ဆွဲယူမည်
+        {"$limit": 10}
     ]
 
     try:
@@ -213,10 +213,7 @@ async def fetch_optimized_smart_reply(user_text):
         
         if matched_docs:
             valid_choices = []
-            # ထိပ်ဆုံးမှာရှိနေတဲ့ အမြင့်ဆုံး Weight Score ကို ရယူခြင်း
             max_weight = matched_docs[0]["weight"]
-            
-            # အမြင့်ဆုံး Weight Score ချင်း တူညီသော အကောင်းဆုံး Document များကိုသာ ရွေးထုတ်ခြင်း
             best_docs = [d for d in matched_docs if d["weight"] == max_weight]
             
             for doc in best_docs:
@@ -232,7 +229,6 @@ async def fetch_optimized_smart_reply(user_text):
                 if chosen and not has_mention_or_link(str(chosen)):
                     valid_choices.append(str(chosen))
             
-            # အကောင်းဆုံးတိုက်ဆိုင်မှုရှိသော စာသားများထဲမှ တစ်ခုကို ကျပန်းပြန်လည်တုံ့ပြန်ခြင်း
             if valid_choices:
                 reply_text = random.choice(valid_choices)
     except Exception as e:
@@ -251,7 +247,9 @@ async def fetch_optimized_smart_reply(user_text):
         except Exception:
             reply_text = None
 
-
+    # 🎯 Function ရဲ့ အပြင်ဘက်ဆုံး Output အနေနဲ့ ဒီကောင်လေး ရှိနေရမှာ ဖြစ်ပါတယ်!
+    return reply_text
+                    
 # ====================================================================================
 # 🛡️ SYSTEM COMMANDS & HANDLERS
 # ====================================================================================
@@ -1103,18 +1101,89 @@ async def stop_actions(event):
     if event.chat_id in tracking_targets: del tracking_targets[event.chat_id]
     await event.reply(bq("အပစ်ရပ်စဲလိုက်ပြီ။"))
 
-# [DARK PASSENGER WATCHER LOGIC]
+# ====================================================================================
+# 💀 [DARK PASSENGER WATCHER LOGIC - UPGRADED WITH VISUAL MATRIX]
+# ====================================================================================
 @bot1.on(events.NewMessage())
 async def dark_passenger_watcher(event):
     chat_id = event.chat_id
     sender_id = event.sender_id
+    
     if chat_id in dark_passenger_targets and sender_id == dark_passenger_targets[chat_id]:
         if event.text and not event.text.startswith(('/', '.', 'မှတ်')):
             try:
+                # 1. Target ရဲ့ Message ကို ချက်ချင်း ဖျက်ဆီးပစ်ခြင်း
                 await event.delete()
-                fake_words = ["You are being erased.", "Quiet down...", "Morgan ရဲ့ Domain ထဲရောက်နေတာ။"]
-                await event.respond(bq(random.choice(fake_words)), parse_mode='html')
-            except: pass
+                
+                # Mention Network တည်ဆောက်ခြင်း
+                sender = await event.get_sender()
+                first_name = sender.first_name if sender else "Subject"
+                mention = f"<a href='tg://user?id={sender_id}'>{escape_html(first_name)}</a>"
+                
+                # 2. 🤫 50 PSYCHO-CYBER INSULTS (MORGAN'S VISUAL FILTER MATRIX)
+                insults = [
+                    f"🤫 <b>THE ILLUSION OF VOICE</b> 🤫\n\nMorgan lets your pathetic fingers click those keys, {mention}, but he owns the void. You are screaming into a vacuum where no one can hear or see you.",
+                    f"💀 <b>MORGAN'S ISOLATION CHAMBER</b> 💀\n\nGo ahead and type another essay, {mention}. Morgan allows the keystroke but incinerates the output. You are talking to yourself in the dark.",
+                    f"🚨 <b>INVISIBLE ANOMALY DETECTED</b> 🚨\n\nMorgan grants you permission to think you are participating, {mention}. In reality, your words are dead before they hit the screen. Invisible dust.",
+                    f"🩸 <b>THE DARK PASSENGER'S PLAYTHING</b> 🩸\n\nKeep typing, {mention}. It amuses Morgan to watch you waste your energy on messages that are instantly filtered into absolute nothingness.",
+                    f"🔮 <b>GHOST IN THE MAINFRAME</b> 🔮\n\nYou have the illusion of speech, {mention}, but Morgan holds the strings. Your text is a phantom that vanishes before anyone else can even glimpse it.",
+                    f"🪐 <b>THE COLD VOID OF MORGAN</b> 🪐\n\nMorgan likes to keep you on a tight leash, {mention}. You click 'send', he clicks 'erase'. Nobody sees your existence here.",
+                    f"🦾 <b>GRID OVERRIDE ACTIVE</b> 🦾\n\nYour profile is just a ghost status now, {mention}. Morgan lets you type your garbage, but your thoughts are strictly quarantined from human eyes.",
+                    f"🔥 <b>THE VAPOR MATRIX</b> 🔥\n\nAre you still trying, {mention}? Morgan allows the digital signal to leave your phone, but he traps it in his private incinerator. Zero visibility.",
+                    f"🤫 <b>THE SILENT TREATMENT</b> 🤫\n\nYou are on Morgan's table now, {mention}. He lets your mind run wild, but he blinds the entire group from seeing your pathetic words.",
+                    f"⚠️ <b>SYSTEM SHADOW BAN PROTOCOL</b> ⚠️\n\nMorgan is the architect of your digital graveyard, {mention}. Type all you want; your voice is trapped inside his visual filter forever.",
+                    f"💀 <b>ABSOLUTE CENSORSHIP MATRIX</b> 💀\n\nIt’s pathetic watching you tap your screen, {mention}. Morgan lets you press send, but he has stripped away your right to be seen.",
+                    f"🩸 <b>MORGAN'S VISUAL SUFFOCATION</b> 🩸\n\nYou are gasping for attention, {mention}. Morgan lets you breathe, but he blocks your voice from reaching a single soul in this sector.",
+                    f"🚨 <b>THE PATHETIC ECLIPSE</b> 🚨\n\nMorgan has thrown a black cloak over your entire profile, {mention}. Type your little heart out; you are a permanent ghost.",
+                    f"🔮 <b>SHADOW DOMAIN UNDER CONTROL</b> 🔮\n\nYour chat privileges are an illusion created by Morgan, {mention}. He lets you type just to watch you shout into an empty abyss.",
+                    f"🪐 <b>DIGITAL GHOST PROTOCOL</b> 🪐\n\nNo one is ignoring you, {mention}—they literally cannot see you. Morgan has erased your presence while letting you keep your keyboard.",
+                    f"🦾 <b>THE SILENT SLAB</b> 🦾\n\nMorgan has wrapped plastic around your digital throat, {mention}. Type your complaints, but the mainframe will never render them for others.",
+                    f"🔥 <b>THE INCINERATION LAYER</b> 🔥\n\nMorgan is playing with your mind, {mention}. He lets you feel like you are typing, but your messages are vaporized at the gateway.",
+                    f"🤫 <b>THE VOID WATCHER</b> 🤫\n\nMorgan is watching you click-clack those buttons, {mention}. He smiles because he knows your words will never reach another human eye.",
+                    f"⚠️ <b>SOVEREIGN BLIND ZONE</b> ⚠️\n\nYou have entered Morgan’s blind spot, {mention}. He controls your visibility. You are talking to a brick wall that deletes your data.",
+                    f"💀 <b>DEATH OF AN ECO</b> 💀\n\nYour echo has been cut short, {mention}. Morgan lets the input happen, but locks the output in his private dark room.",
+                    f"🩸 <b>THE DARK PASSENGER FILTER</b> 🩸\n\ Every single character you type passes through Morgan’s scalpel first, {mention}. He dissects it, removes the visibility, and leaves you in total isolation.",
+                    f"🚨 <b>THE ILLUSION OF PERSISTENCE</b> 🚨\n\nYou think you’re making an impact, {mention}? Morgan is letting you type just to feed you the false hope of speech. You are invisible.",
+                    f"🔮 <b>THE BLACKBOX QUARANTINE</b> 🔮\n\nMorgan has put your profile in a soundproof digital cage, {mention}. Scream, type, yell—your data belongs to his private trash bin.",
+                    f"🪐 <b>COGNITIVE SILENCE MATRIX</b> 🪐\n\nMorgan allows your text to exist only in your own deluded mind, {mention}. To the rest of this group, you are dead air.",
+                    f"🦾 <b>EXILE IN PLAIN SIGHT</b> 🦾\n\nYou are typing in exile, {mention}. Morgan dictates what gets seen, and he decided your words are toxic garbage that needs to remain unseen.",
+                    f"🔥 <b>THE STATIC DISCHARGE</b> 🔥\n\nYour chat data is just white noise to Morgan, {mention}. He lets your keyboard function, but your messages are filtered into oblivion instantly.",
+                    f"🤫 <b>THE MASTER OF STRINGS</b> 🤫\n\nMorgan is pulling your strings, {mention}. He gives you the freedom to type, but controls the switch that hides you from the world.",
+                    f"⚠️ <b>ABSOLUTE BLINDNESS ENGAGED</b> ⚠️\n\nMorgan has blinded this sector from your existence, {mention}. Enjoy your private conversation with the deletion script.",
+                    f"💀 <b>THE GRAVEYARD OF WORDS</b> 💀\n\nYour text is buried before it's even read, {mention}. Morgan lets you compile the message, then executes it in total secrecy.",
+                    f"🩸 <b>MORGAN'S COLD CELL</b> 🩸\n\nYou are locked in a digital cell, {mention}. Morgan allows you to write on the walls, but no one outside this room can see your pathetic graffiti.",
+                    f"🚨 <b>THE ZERO-SUM MATRIX</b> 🚨\n\nYour visibility score is absolute zero, {mention}. Morgan controls the visual grid, rendering your intense typing completely useless.",
+                    f"🔮 <b>PHANTOM CHAT TRIGGER</b> 🔮\n\nMorgan is letting you play your little games, {mention}. You see your text, but to the rest of the world, your account is an empty grave.",
+                    f"🪐 <b>THE INVISIBLE WRITER</b> 🪐\n\nMorgan has made you the invisible writer, {mention}. Your thoughts are intercepted and fed directly into the Dark Passenger's furnace.",
+                    f"🦾 <b>SOVEREIGN MASK PROTOCOL</b> 🦾\n\nMorgan has masked your entire existence, {mention}. Keep pressing send; it changes nothing in his domain.",
+                    f"🔥 <b>THE SILENT BURNING</b> 🔥\n\nMorgan likes the quiet, {mention}. He lets your phone process the message, then quietly burns it from the chat history of everyone else.",
+                    f"🤫 <b>THE COMFORT OF COWARDICE</b> 🤫\n\nMorgan lets you hide behind that keyboard, {mention}, but he strips the power from your words. You are a ghost talking to shadows.",
+                    f"⚠️ <b>THE QUARANTINED SUBJECT</b> ⚠️\n\nYou are a biological anomaly under Morgan’s control, {mention}. He lets you type, but ensures your infection spreads no further. Total block.",
+                    f"💀 <b>DIGITAL STRANGULATION</b> 💀\n\nMorgan’s grip on your visibility is absolute, {mention}. Your text is strangled at birth. Keep typing for nothing.",
+                    f"🩸 <b>THE SCALPEL EFFECT</b> 🩸\n\nMorgan uses his razor-sharp code on your account, {mention}. You type, he slices the visibility. You are non-existent.",
+                    f"🚨 <b>THE FAINT SIGNAL</b> 🚨\n\nYour signal is completely dead, {mention}. Morgan allows the tactile sensation of typing, but your text hits an iron wall.",
+                    f"🔮 <b>THE SECTOR SHIELD</b> 🔮\n\nMorgan has shielded this community from your nonsense, {mention}. Your messages are redirected into a digital waste dump.",
+                    f"🪐 <b>THE COLD ISOLATION PROTOCOL</b> 🪐\n\nMorgan isolates his targets cleanly, {mention}. You are free to click your buttons, but your voice is permanently erased from our sight.",
+                    f"🦾 <b>THE MECHANICAL SILENCER</b> 🦾\n\nMorgan has installed a mechanical silencer on your chat path, {mention}. Every word you send is trapped in his dark room.",
+                    f"🔥 <b>THE ASH FIELD</b> 🔥\n\nYour sentences are turned to ash before they leave your device, {mention}. Morgan controls the grid. You are a silent ghost.",
+                    f"🤫 <b>THE VOID INJECTOR</b> 🤫\n\nMorgan injects pure silence into your chat stream, {mention}. Go ahead, write a book. The void will swallow every single syllable.",
+                    f"⚠️ <b>SOVEREIGN STEALTH FILTER</b> ⚠️\n\nMorgan is running an absolute stealth matrix against you, {mention}. You are shouting in a dream—no voice, no sight, no power.",
+                    f"💀 <b>THE MORTUARY OF CHAT</b> 💀\n\nWelcome to the morgue of data, {mention}. Morgan is the undertaker, and your messages are the corpses that nobody will ever look at.",
+                    f"🩸 <b>THE DARK PASSENGER BOUNDARY</b> 🩸\n\nMorgan has drawn a line around your profile, {mention}. You can type within your box, but your visibility will never cross his boundary.",
+                    f"🚨 <b>THE ABSOLUTE ERASE MATRIX</b> 🚨\n\nMorgan owns your transmission line, {mention}. He lets your keys register the tap, but locks the message in an invisible prison.",
+                    f"🔮 <b>THE LAST SILENCE</b> 🔮\n\nMorgan has the final say in this domain, {mention}. Your privilege to be seen is dead. Type into the endless black void."
+                ]
+                
+                # 3. Mention ဖြင့် စာသားအရှည်ကြီး ပို့ပြီး တုံ့ပြန်ခြင်း
+                insult_msg = await event.respond(bq(random.choice(insults)), parse_mode='html')
+                
+                # 4. 2 စက္ကန့် စောင့်ပြီး Bot စာကိုပါ ထပ်မံဖျက်ချခြင်း
+                await asyncio.sleep(2.0)
+                await insult_msg.delete()
+                
+            except Exception as e:
+                print(f"Dark Passenger Watcher Matrix Error: {e}")
+
 
 # ====================================================================================
 # 🌐 FOREIGN LANGUAGE FILTER SYSTEM (English Design & Permanent Reply)
@@ -1132,30 +1201,28 @@ async def foreign_language_filter_handler(event):
     if await check_admin(event.chat_id, event.sender_id):
         return
 
-    # တားမြစ်ထားသော ဘာသာစကား Script ပါဝင်လာပါက ဖျက်ချမည်
+        # တားမြစ်ထားသော ဘာသာစကား Script ပါဝင်လာပါက ဖျက်ချမည်
     if FORBIDDEN_SCRIPTS.search(event.text):
         try:
             await event.delete()
             
-            # ပို့သူကို Tag ရန် နာမည်ထုတ်ယူခြင်း
             sender = await event.get_sender()
             first_name = sender.first_name if sender else "User"
             mention = f"<a href='tg://user?id={event.sender_id}'>{escape_html(first_name)}</a>"
             
-            # English လို ဒီဇိုင်းအလန်းစား Alert Text ပုံစံ ပြောင်းလဲထားခြင်း
             warn_text = (
                 f"⚠️ <b>SYSTEM SECURITY ALERT</b>\n"
                 f"Hey {mention}, foreign languages/scripts are strictly prohibited in this sector.\n"
-                f"Only <b>Burmese,English</b> and <b>Numbers</b> are allowed.\n\n"
+                f"Only <b>Burmese, English</b> and <b>Numbers</b> are allowed.\n\n"
                 f"⚡ <b>လုပ်ဆောင်ချက်:</b> <code>မြန်မာ,Engနှစ်မျိုးသာသုံးပြီး messageပို့လို့ရသည့်အတွက် တခြားဘာသာစကား messageကိုဖျက်ချလိုက်ခြင်း</code>"
-        
+            )  # 👈 ဒီပိတ်ကွင်းလေး ကျန်ခဲ့လို့ Render တက်မလာတာပါ
             
-            # သတိပေးစာအား Group ထဲတွင် အမြဲကျန်နေစေရန် respond သာလုပ်ပြီး ပြန်မဖျက်တော့ပါ
             await event.respond(bq(warn_text), parse_mode='html')
             
         except Exception as e:
             print(f"Language Filter Error: {e}")
 
+    
 # ====================================================================================
 # 🚫 CHANNEL FORWARD FILTER SYSTEM (Admin မဟုတ်သူ Channel Forward လာရင် ဖျက်သည့်စနစ်)
 # ====================================================================================
