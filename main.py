@@ -1305,12 +1305,12 @@ async def processed_background_reply(event, user_text, as_reply=True):
             async with bot1.action(chat_entity, 'typing'):
                 await asyncio.sleep(random.uniform(1.0, 2.2))
                             
-            if as_reply:
+    if as_reply: 
     # /ktr စနစ်အတွက် စာကို Reply လိုက်ထောက်မည်
-    await event.reply(smart_reply, parse_mode='html')
-else:
+       await event.reply(smart_reply, parse_mode='html')
+    else:
     # စကားဝင်ပြော (GLOBAL_TALK) အတွက် Reply မထောက်ဘဲ Text အဖြစ်ပဲ သန့်သန့်ထွက်မည်
-    await event.respond(smart_reply, parse_mode='html')
+       await event.respond(smart_reply, parse_mode='html')
 
         except errors.rpcerrorlist.FloodWaitError as e:
             await asyncio.sleep(e.seconds)
