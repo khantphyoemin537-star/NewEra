@@ -1304,18 +1304,19 @@ async def processed_background_reply(event, user_text, as_reply=True):
             # Bot က စာရိုက်နေသလိုပြသမည့် အပိုင်း
             async with bot1.action(chat_entity, 'typing'):
                 await asyncio.sleep(random.uniform(1.0, 2.2))
-                            
-    if as_reply: 
-    # /ktr စနစ်အတွက် စာကို Reply လိုက်ထောက်မည်
-       await event.reply(smart_reply, parse_mode='html')
-    else:
-    # စကားဝင်ပြော (GLOBAL_TALK) အတွက် Reply မထောက်ဘဲ Text အဖြစ်ပဲ သန့်သန့်ထွက်မည်
-       await event.respond(smart_reply, parse_mode='html')
-
+                
+            if as_reply:
+                # /ktr စနစ်အတွက် စာကို ရိုးရိုးပဲ Reply လိုက်ထောက်မည်
+                await event.reply(smart_reply, parse_mode='html')
+            else:
+                # စကားဝင်ပြော (GLOBAL_TALK) အတွက် Reply မထောက်ဘဲ ရိုးရိုး Text အဖြစ်ပဲ ထွက်မည်
+                await event.respond(smart_reply, parse_mode='html')
+                
         except errors.rpcerrorlist.FloodWaitError as e:
             await asyncio.sleep(e.seconds)
         except Exception:
             pass
+
 
 @bot1.on(events.NewMessage(incoming=True))
 async def reply_save_counter_handler(event):
