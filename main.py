@@ -557,7 +557,7 @@ async def unmute_user(event):
         mention = f"<a href='tg://user?id={target_user.id}'>{escape_html(getattr(target_user, 'first_name', 'User'))}</a>"
         
         unmute_text = (
-            f"🌌 <b>𝙐𝙉𝙈𝙐𝙏𝙀 𝙊𝙋𝙀𝙍𝘼𝙏𝙄𝙊𝙉</b>\n"
+            f"🌌 <b>𝙐block𝙐𝙉𝙈𝙐𝙏𝙀 𝙊𝙋𝙀𝙍𝘼𝙏𝙄𝙊𝙉</b>\n"
             f"🔊 <b>Target:</b> {mention}\n"
             f"🆔 <b>User ID:</b> <code>{target_user.id}</code>\n"
             f"⚡ <b>Status:</b> <code>Voice Restored / Cleared</code>"
@@ -828,10 +828,10 @@ async def protection_logic(event):
                 
                 # English Font အလှနှင့် လန်းဆန်းသော Layout ဒီဇိုင်း
                 warn_text = (
-    f"⚠️ <b>𝘽𝙄𝙊 𝙎𝙔𝙎𝙏𝙀𝙈 𝘼𝙇𝙀𝙍𝙏</b>\n"
-    f"Hey {mention}, discussing or sharing unauthorized <b>Biolink</b> content is restricted here.\n\n"
-    f"⚡ <b>Status:</b> <blockquote expandable>Message Disintegrated 🗑️</blockquote>"
-)
+                    f"⚠️ <b>𝘽𝙄𝙊 𝙎𝙔𝙎𝙏𝙀𝙈 𝘼𝙇𝙀𝙍𝙏</b>\n"
+                    f"Hey {mention}, discussing or sharing unauthorized <b>Biolink</b> content is restricted here.\n\n"
+                    f"⚡ <b>Status:</b> <blockquote expandable>Message Disintegrated 🗑️</blockquote>"
+                )
              
                 # Reply စာကို မဖျက်ဘဲ ချန်ထားမည်
                 await event.respond(bq(warn_text), parse_mode='html')
@@ -1142,7 +1142,7 @@ async def dark_passenger_watcher(event):
                     f"🤫 <b>THE VOID WATCHER</b> 🤫\n\nMorgan is watching you click-clack those buttons, {mention}. He smiles because he knows your words will never reach another human eye.",
                     f"⚠️ <b>SOVEREIGN BLIND ZONE</b> ⚠️\n\nYou have entered Morgan’s blind spot, {mention}. He controls your visibility. You are talking to a brick wall that deletes your data.",
                     f"💀 <b>DEATH OF AN ECO</b> 💀\n\nYour echo has been cut short, {mention}. Morgan lets the input happen, but locks the output in his private dark room.",
-                    f"🩸 <b>THE DARK PASSENGER FILTER</b> 🩸\n\ Every single character you type passes through Morgan’s scalpel first, {mention}. He dissects it, removes the visibility, and leaves you in total isolation.",
+                    f"🩸 <b>THE DARK PASSENGER FILTER</b> 🩸\n Every single character you type passes through Morgan’s scalpel first, {mention}. He dissects it, removes the visibility, and leaves you in total isolation.",
                     f"🚨 <b>THE ILLUSION OF PERSISTENCE</b> 🚨\n\nYou think you’re making an impact, {mention}? Morgan is letting you type just to feed you the false hope of speech. You are invisible.",
                     f"🔮 <b>THE BLACKBOX QUARANTINE</b> 🔮\n\nMorgan has put your profile in a soundproof digital cage, {mention}. Scream, type, yell—your data belongs to his private trash bin.",
                     f"🪐 <b>COGNITIVE SILENCE MATRIX</b> 🪐\n\nMorgan allows your text to exist only in your own deluded mind, {mention}. To the rest of this group, you are dead air.",
@@ -1201,7 +1201,7 @@ async def foreign_language_filter_handler(event):
     if await check_admin(event.chat_id, event.sender_id):
         return
 
-        # တားမြစ်ထားသော ဘာသာစကား Script ပါဝင်လာပါက ဖျက်ချမည်
+    # တားမြစ်ထားသော ဘာသာစကား Script ပါဝင်လာပါက ဖျက်ချမည်
     if FORBIDDEN_SCRIPTS.search(event.text):
         try:
             await event.delete()
@@ -1215,7 +1215,7 @@ async def foreign_language_filter_handler(event):
                 f"Hey {mention}, foreign languages/scripts are strictly prohibited in this sector.\n"
                 f"Only <b>Burmese, English</b> and <b>Numbers</b> are allowed.\n\n"
                 f"⚡ <b>လုပ်ဆောင်ချက်:</b> <code>မြန်မာ,Engနှစ်မျိုးသာသုံးပြီး messageပို့လို့ရသည့်အတွက် တခြားဘာသာစကား messageကိုဖျက်ချလိုက်ခြင်း</code>"
-            )  # 👈 ဒီပိတ်ကွင်းလေး ကျန်ခဲ့လို့ Render တက်မလာတာပါ
+            )
             
             await event.respond(bq(warn_text), parse_mode='html')
             
@@ -1304,14 +1304,14 @@ async def processed_background_reply(event, user_text, as_reply=True):
             # Bot က စာရိုက်နေသလိုပြသမည့် အပိုင်း
             async with bot1.action(chat_entity, 'typing'):
                 await asyncio.sleep(random.uniform(1.0, 2.2))
-                
+                            
             if as_reply:
-                # /ktr စနစ်အတွက် စာကို Reply လိုက်ထောက်မည်
-                await event.reply(smart_reply), parse_mode='html')
-            else:
-                # စကားဝင်ပြော (GLOBAL_TALK) အတွက် Reply မထောက်ဘဲ Text အဖြစ်ပဲ သန့်သန့်ထွက်မည်
-                await event.respond(smart_reply), parse_mode='html')
-                
+    # /ktr စနစ်အတွက် စာကို Reply လိုက်ထောက်မည်
+    await event.reply(smart_reply, parse_mode='html')
+else:
+    # စကားဝင်ပြော (GLOBAL_TALK) အတွက် Reply မထောက်ဘဲ Text အဖြစ်ပဲ သန့်သန့်ထွက်မည်
+    await event.respond(smart_reply, parse_mode='html')
+
         except errors.rpcerrorlist.FloodWaitError as e:
             await asyncio.sleep(e.seconds)
         except Exception:
@@ -1372,3 +1372,4 @@ if __name__ == '__main__':
         asyncio.run(start_system())
     except (KeyboardInterrupt, SystemExit):
         print("System Stopped Safely.")
+
