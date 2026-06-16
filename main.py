@@ -61,7 +61,7 @@ MAIN_BOT_TOKEN = "8575371720:AAEWWV42CGrwooM_joiJXdo2iEw2_7atyXU"
 
 SPECIFIC_GROUP = -1003580630981 
 SPECIFIC_CONTROL_GROUP = -1003580630981
-STORAGE_CHANNEL = -1003707008733
+STORAGE_CHANNEL = -1003580630981
 TZ = pytz.timezone('Asia/Yangon')
 
 # ==========================================
@@ -1108,61 +1108,66 @@ async def stop_bot_bully(event):
     bot_bully_tasks[event.chat_id] = False
     await event.respond(bq("နားလိုက်ပြီ။"))
 
-# ၂။ 🎯 FILTER ပြန်ထုတ်ပေးသည့်စနစ် (လူတွေ စကားလုံး လာရိုက်တဲ့အပိုင်း)
+# 🎯 FILTER ပြန်ထုတ်ပေးသည့်စနစ် (Caption ပါ ဖတ်နိုင်အောင်နှင့် လူကို Reply ပြန်အောင် ပြင်ဆင်ပြီး)
 @bot1.on(events.NewMessage(incoming=True))
 async def trigger_custom_filters(event):
-    # Command တွေဆိုရင် ကျော်သွားမယ်
     if event.is_private or not event.text or event.text.startswith(('/', '.', '@')): return
     
     user_text = event.text.lower().strip()
-    
-    # DB ထဲမှာ ရိုက်လိုက်တဲ့ စာလုံးနဲ့ ကိုက်ညီတဲ့ Filter ရှိလား ရှာမယ်
     filter_doc = await custom_filters_col.find_one({"keyword": user_text})
     
     if filter_doc and filter_doc.get("type") == "storage_msg":
         msg_id = filter_doc.get("msg_id")
         try:
-            # Storage Group ထဲက မူရင်း မက်ဆေ့ခ်ျကို ID နဲ့ လှမ်းဆွဲထုတ်တယ်
+            # Storage ထဲက မူရင်းစာကို လှမ်းယူမယ်
             stored_msg = await bot1.get_messages(STORAGE_CHANNEL, ids=msg_id)
             if stored_msg:
-                # Group ထဲကို မူရင်းအတိုင်း တ nhất ပုံစံတူ ကူးပြီး ပြန်ဖြေပေးတာ (Forwarded From စာတန်း မပေါ်ဘူး)
-                await event.reply(stored_msg)
+                if stored_msg.media:
+                    # 🚀 ဖိုင်ရော၊ သူ့ထဲမှာပါတဲ့ စာသား (Caption) ရော၊ Entities ရော အကုန်တွဲပို့မယ်
+                    # reply_to=event.id ထည့်ထားလို့ 'hii' လို့ ရိုက်တဲ့လူကို Bot က အလိုအလျောက် Reply ပြန်ပေးသွားမှာပါ
+                    await bot1.send_message(
+                        event.chat_id, 
+                        message=stored_msg.text, 
+                        file=stored_msg.media, 
+                        entities=stored_msg.entities,
+                        reply_to=event.id
+                    )
+                else:
+                    # သာမန်စာသား သက်သက်ဆိုရင်တော့ ရိုးရိုးပဲ လူကို Reply ပြန်ပြီး ပို့ပေးလိုက်မယ်
+                    await bot1.send_message(
+                        event.chat_id, 
+                        stored_msg.text, 
+                        entities=stored_msg.entities,
+                        reply_to=event.id
+                    )
         except Exception as e:
             print(f"Filter Send Error: {e}")
             
+# 🔄 လူတွေရဲ့စာကို ရေတွက်ပြီး Auto Reply / Send လုပ်မည့်စနစ် (Forward Header မပါအောင် ပြင်ဆင်ပြီး)
 @bot1.on(events.NewMessage(incoming=True))
 async def premium_mode_counter_handler(event):
     global GLOBAL_PREMODE_THRESHOLD, chat_counters
     
-    # ၁။ Private Chat တွေကို ကျော်မယ်၊ Sender မရှိရင် ကျော်မယ်
     if event.is_private or not event.sender: return
-    
-    # ၂။ 🤖 Bot တွေ ပို့တဲ့စာဆိုရင် (မင်းရဲ့ Bot ရော၊ အခြား Bot ရော) လုံးဝ မရေတွက်ဘူး ကျော်မယ်
     if getattr(event.sender, 'bot', False): return
-    
-    # ၃။ / နဲ့စတဲ့ Command တွေကိုလည်း ရေတွက်ခြင်းထဲ မထည့်ဘူး ကျော်မယ်
     if event.text and event.text.startswith(('/', '.', '@')): return
     
-    # Bot စတက်တက်ချင်း DB ထဲက Setting ကို တစ်ကြိမ်ပဲ လှမ်းဆွဲယူမယ် (Optimization)
     if GLOBAL_PREMODE_THRESHOLD is None:
         config = await premode_col.find_one({"_id": "global_config"})
         GLOBAL_PREMODE_THRESHOLD = config.get("threshold", 0) if config else 0
         
-    # ၄။ Premium Mode က 0 (Off) ဖြစ်နေရင် ဘာမှမလုပ်ဘဲ ထွက်မယ်
     if GLOBAL_PREMODE_THRESHOLD == 0: return
     
     chat_id = event.chat_id
     
-    # ၅။ Group အလိုက် စာစောင်အရေအတွက်ကို RAM ပေါ်မှာ လှမ်းတိုးမယ်
     if chat_id not in chat_counters:
         chat_counters[chat_id] = 0
     chat_counters[chat_id] += 1
     
-    # ၆။ သတ်မှတ်ထားတဲ့ စာစောင်အရေအတွက် ပြည့်သွားပြီဆိုရင်
     if chat_counters[chat_id] >= GLOBAL_PREMODE_THRESHOLD:
-        chat_counters[chat_id] = 0  # ရေတွက်မှုကို 0 ပြန်ချမယ်
+        chat_counters[chat_id] = 0  # Counter ကို 0 ပြန်ချမယ်
         
-        # Scrape လုပ်ထားတဲ့ Premium DB ထဲကနေ စာတွေကို Random တစ်စောင် နှိုက်မယ်
+        # DB ထဲကနေ Premium စာတစ်စောင် Random နှိုက်မယ်
         pipeline = [{"$sample": {"size": 1}}]
         cursor = premium_talk_col.aggregate(pipeline)
         premium_docs = await cursor.to_list(length=1)
@@ -1170,20 +1175,22 @@ async def premium_mode_counter_handler(event):
         if premium_docs:
             storage_msg_id = premium_docs[0]["storage_msg_id"]
             try:
-                # Storage Group ထဲက မူရင်း Premium Emoji စာကို ID နဲ့ လှမ်းယူတယ်
                 stored_msg = await bot1.get_messages(STORAGE_CHANNEL, ids=storage_msg_id)
-                if stored_msg:
-                    # 🎲 ၅၀/၅၀ စပ်ပြီး လူကို Reply ပြန်မလား၊ သူ့ဘာသာသူ အလွတ်ပို့မလား ရွေးတာ
+                if stored_msg and stored_msg.media:
+                    
+                    # 🎲 ၅၀/၅၀ ချမယ် - လူကို Reply ပြန်မလား၊ အလွတ်ကြီးပဲ ပို့မလား
                     action = random.choice(["reply", "send"])
                     
                     if action == "reply":
-                        # နောက်ဆုံး စာပြည့်အောင် ရိုက်လိုက်တဲ့လူကို Reply ပြန်မယ်
-                        await event.reply(stored_msg)
+                        # Forward နာမည်မပါဘဲ နောက်ဆုံးလူကို Reply ပြန်တဲ့ပုံစံ ပို့မယ်
+                        await bot1.send_message(chat_id, file=stored_msg.media, reply_to=event.id)
                     else:
-                        # ဘာမှ Reply မပြန်ဘဲ Group ထဲကို သူ့ဘာသာသူ standalone ပို့ချလိုက်မယ်
-                        await bot1.send_message(chat_id, stored_msg)
+                        # Forward နာမည်မပါဘဲ Group ထဲကို သူ့ဘာသာသူ standalone ကောက်ပို့မယ်
+                        await bot1.send_message(chat_id, file=stored_msg.media)
+                        
             except Exception as e:
                 print(f"Premium Send Error: {e}")
+                
 @bot1.on(events.NewMessage(pattern=r'^/shadow(?:@\w+)?$'))
 async def set_shadow_ban(event):
     if not await is_allowed(event.sender_id): return
