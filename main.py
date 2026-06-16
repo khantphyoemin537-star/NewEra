@@ -8,6 +8,7 @@ import re
 import time
 from datetime import datetime, timedelta
 import pytz
+import pickle
 from flask import Flask
 from motor.motor_asyncio import AsyncIOMotorClient
 from telethon.tl.types import User
@@ -60,6 +61,7 @@ MAIN_BOT_TOKEN = "8575371720:AAEWWV42CGrwooM_joiJXdo2iEw2_7atyXU"
 
 SPECIFIC_GROUP = -1003580630981 
 SPECIFIC_CONTROL_GROUP = -1003580630981
+STORAGE_CHANNEL = -1003707008733
 TZ = pytz.timezone('Asia/Yangon')
 
 # ==========================================
@@ -79,7 +81,9 @@ ans_col = db["chatbot_answers"]
 morgan_col = db["morgan_talk"] 
 rank_col = db["rank_col"]
 system_col = db["system_col"]
-reply_save_col = db["reply_save_col"]  
+reply_save_col = db["reply_save_col"]
+premium_talk_col = db["premium_talk_pool"]  # 👑 Premium Emoji မက်ဆေ့ခ်ျတွေ စုဆောင်းမည့် DB
+premode_col = db["premode_status"]          # ⚙️ On/Off Setting သိမ်းမည့် DB
 
 # ==========================================
 # 🤖 CLIENT SETUP (SINGLE BOT)
@@ -105,7 +109,8 @@ message_counts = {}
 GLOBAL_TALK = False 
 TRAINING_ENABLED_MORGAN = False      
 group_msg_counters = {}
-
+GLOBAL_PREMODE_THRESHOLD = None  # Lazy Loading အတွက် ကြိုတင်သတ်မှတ်ခြင်း (0 ဆိုရင် ပိတ်ထားတာ)
+chat_counters = {}               # Group တစ်ခုချင်းစီရဲ့ စာစောင်အရေအတွက်ကို RAM ပေါ်မှာ ခဏမှတ်မည့်နေရာ
 IS_REPLY_ACTIVE = False              
 REPLY_INTERVAL = 4                   
 GLOBAL_TALK_INTERVAL = 6            
@@ -164,6 +169,17 @@ def has_mention_or_link(message_text):
     if '@' in message_text or 't.me/' in message_text or 'http' in message_text:
         return True
     return False
+
+# DB ထဲက Dictionary ကို Telethon Entity Object ပြန်ပြောင်းပေးမယ့် Helper
+def dict_to_entity(d):
+    if not d: return None
+    cls_name = d.get('_')
+    if cls_name:
+        cls = getattr(types, cls_name, None)
+        if cls:
+            kwargs = {k: v for k, v in d.items() if k != '_'}
+            return cls(**kwargs)
+    return None
 # ====================================================================================
 # 🧠 SCHEMA-AGNOSTIC SMART REPLY SEARCH ENGINE (Weight-Scored Accuracy System)
 # ====================================================================================
@@ -425,27 +441,95 @@ async def character_spam_filter(event):
             await event.respond(bq(warn_msg), parse_mode='html') 
         except Exception as e: print(f"Char Spam Warn Error: {e}")
 
+# ၁။ 💾 FILTER သိမ်းဆည်းသည့်စနစ် (Reply ပြန်ပြီး သိမ်းမည့်အပိုင်း)
 @bot1.on(events.NewMessage(pattern=r'^[/.]f\s+(.*)'))
 async def add_filter(event):
     if not await check_admin(event.chat_id, event.sender_id): return
+    
     input_str = event.pattern_match.group(1).split(None, 1)
-    keyword = input_str[0].lower()
+    keyword = input_str[0].lower().strip()
+    
     reply = await event.get_reply_message()
 
     if reply:
-        media, m_type = None, None
-        if reply.sticker: media, m_type = reply.media, "sticker"
-        elif reply.photo: media, m_type = reply.media, "photo"
-        elif reply.video: media, m_type = reply.media, "video"
-        elif reply.text: media, m_type = reply.text, "text"
+        try:
+            # Reply ထားတဲ့ မက်ဆေ့ခ်ျ (စာ၊ ပုံ၊ Premium Emoji အကုန်) ကို Storage ထဲ Forward လှမ်းလုပ်မယ်
+            forwarded = await bot1.forward_messages(STORAGE_CHANNEL, reply)
+            
+            # MongoDB ထဲမှာတော့ အဲဒီ မက်ဆေ့ခ်ျရဲ့ ID (ဂဏန်းတစ်ခုတည်း) ကိုပဲ သိမ်းမယ် (DB ဘယ်တော့မှ မပြည့်ဘူး)
+            await custom_filters_col.update_one(
+                {"keyword": keyword}, 
+                {"$set": {
+                    "type": "storage_msg",
+                    "msg_id": forwarded.id,
+                    "chat_id": "global"
+                }}, 
+                upsert=True
+            )
+            await event.reply(bq(f"အိုကေ! '{keyword}' filter ကို Premium Emoji တွေအပါအဝင် Cloud စနစ်နဲ့ မှတ်လိုက်ပြီ ✅"), parse_mode='html')
+        except Exception as e:
+            await event.reply(bq(f"❌ Storage ထဲ လှမ်းသိမ်းရမှာ Error တက်သွားတယ်: {e}"), parse_mode='html')
+    else:
+        await event.reply(bq("⚠️ Filter မှတ်ဖို့အတွက် ပို့ချင်တဲ့စာ သို့မဟုတ် မီဒီယာကို Reply ပြန်ပြီးမှ သုံးပေးပါ ဘရို။"), parse_mode='html')
 
-        if media:
-            await custom_filters_col.update_one({"keyword": keyword}, {"$set": {"content": media, "type": m_type, "chat_id": "global"}}, upsert=True)
-            await event.reply(bq(f"အိုကေ! '{keyword}' အတွက် {m_type} filter ကို Group အားလုံးအတွက် မှတ်လိုက်ပြီ ✅"), parse_mode='html')
-    elif len(input_str) > 1:
-        await custom_filters_col.update_one({"keyword": keyword}, {"$set": {"content": input_str[1], "type": "text", "chat_id": "global"}}, upsert=True)
-        await event.reply(bq(f"အိုကေ! '{keyword}' ဆိုရင် '{input_str[1]}' လို့ Group အားလုံးမှာ ပြန်ပေးမယ်။ ✅"), parse_mode='html')
+@bot1.on(events.NewMessage(pattern=r'^[/.]premode\s+(\d+|off)'))
+async def set_global_premode(event):
+    global GLOBAL_PREMODE_THRESHOLD
+    # Owner သို့မဟုတ် Group Admin ဖြစ်မှ သုံးခွင့်ပေးမယ်
+    if event.sender_id != OWNER_ID:
+        if not await check_admin(event.chat_id, event.sender_id): return
+        
+    input_val = event.pattern_match.group(1).lower().strip()
+    
+    if input_val == "off":
+        GLOBAL_PREMODE_THRESHOLD = 0
+        await premode_col.update_one({"_id": "global_config"}, {"$set": {"threshold": 0}}, upsert=True)
+        await event.reply(bq("👑 Global Premium Mode ကို လုံးဝ ပိတ် (OFF) လိုက်ပါပြီ။ 🔴"), parse_mode='html')
+    else:
+        num = int(input_val)
+        if num <= 0:
+            await event.reply(bq("⚠️ စာစောင်ရေတွက်က ၁ ထက်ကြီးရပါမယ် ဘရို။"))
+            return
+        GLOBAL_PREMODE_THRESHOLD = num
+        await premode_col.update_one({"_id": "global_config"}, {"$set": {"threshold": num}}, upsert=True)
+        await event.reply(bq(f"👑 Global Premium Mode ကို စာစောင် **[{num}]** စောင်ပြည့်စနစ်နဲ့ ဖွင့်လိုက်ပါပြီ။ 🟢"), parse_mode='html')
+        
+# 2️⃣ SPECIFIC_GROUP ထဲက ရှိပြီးသား Premium စာတွေကို တစ်ခါတည်း အကုန်ခြစ်သိမ်းမည့် Scraper (Owner Only)
+@bot1.on(events.NewMessage(pattern=r'^[/.]scrapepre'))
+async def scrape_premium_messages(event):
+    if event.sender_id != OWNER_ID: return
+    
+    await event.reply(bq("⏳ SPECIFIC_GROUP ထဲက Premium Emoji ပါတဲ့စာတွေကို စတင်ရှာဖွေပြီး Cloud Storage ထဲ သိမ်းဆည်းနေပါတယ်... (ခဏစောင့်ပေးပါ)"), parse_mode='html')
+    
+    collected_count = 0
+    # အစောင် ၂၀၀၀ အထိ နောက်ပြန်လှန်ရှာမယ် (မင်းစိတ်ကြိုက် limit တိုးလို့ရပါတယ်)
+    async for msg in bot1.iter_messages(SPECIFIC_GROUP, limit=2000):
+        if msg.text and msg.entities:
+            has_premium = False
+            for ent in msg.entities:
+                # Premium Emoji (Custom Emoji) ပါမပါ စစ်ဆေးခြင်း
+                if isinstance(ent, types.MessageEntityCustomEmoji):
+                    has_premium = True
+                    break
+            
+            if has_premium:
+                # DB ထဲမှာ ရှိပြီးသားစာ ဖြစ်နေရင် ထပ်မသိမ်းအောင် စစ်မယ်
+                exists = await premium_talk_col.find_one({"orig_msg_id": msg.id})
+                if not exists:
+                    try:
+                        # Storage Group ထဲကို လှမ်းသိမ်းမယ်
+                        forwarded = await bot1.forward_messages(STORAGE_CHANNEL, msg)
+                        # DB ထဲမှာ Storage Message ID ကို သိမ်းမယ်
+                        await premium_talk_col.insert_one({
+                            "orig_msg_id": msg.id,
+                            "storage_msg_id": forwarded.id
+                        })
+                        collected_count += 1
+                        await asyncio.sleep(0.6) # Telegram Flood အမိန့်မထိအောင် 0.3 စက္ကန့်စီ ခြားပြီးသိမ်းတာ
+                    except Exception:
+                        continue
 
+    await event.reply(bq(f"🎉 သိမ်းဆည်းခြင်း အောင်မြင်သည်! စုစုပေါင်း Premium Emoji မက်ဆေ့ခ်ျ {collected_count} စောင်ကို DB အသစ်ထဲသို့ ထည့်သွင်းပြီးပါပြီ။ ✅"), parse_mode='html')       
 # ====================================================================================
 # 🆔 COMBINED IDENTITY MATRIX SYSTEM (User & Group ID Multi-Locator)
 # ====================================================================================
@@ -1024,19 +1108,82 @@ async def stop_bot_bully(event):
     bot_bully_tasks[event.chat_id] = False
     await event.respond(bq("နားလိုက်ပြီ။"))
 
-@bot1.on(events.NewMessage())
-async def custom_filter_watcher(event):
-    if event.is_private or not event.text or event.sender_id in bot_ids: return
-    user_msg = event.text.lower().strip()
-    async for item in custom_filters_col.find():
-        keyword = item["keyword"].lower().strip()
-        if user_msg == keyword:
+# ၂။ 🎯 FILTER ပြန်ထုတ်ပေးသည့်စနစ် (လူတွေ စကားလုံး လာရိုက်တဲ့အပိုင်း)
+@bot1.on(events.NewMessage(incoming=True))
+async def trigger_custom_filters(event):
+    # Command တွေဆိုရင် ကျော်သွားမယ်
+    if event.is_private or not event.text or event.text.startswith(('/', '.', '@')): return
+    
+    user_text = event.text.lower().strip()
+    
+    # DB ထဲမှာ ရိုက်လိုက်တဲ့ စာလုံးနဲ့ ကိုက်ညီတဲ့ Filter ရှိလား ရှာမယ်
+    filter_doc = await custom_filters_col.find_one({"keyword": user_text})
+    
+    if filter_doc and filter_doc.get("type") == "storage_msg":
+        msg_id = filter_doc.get("msg_id")
+        try:
+            # Storage Group ထဲက မူရင်း မက်ဆေ့ခ်ျကို ID နဲ့ လှမ်းဆွဲထုတ်တယ်
+            stored_msg = await bot1.get_messages(STORAGE_CHANNEL, ids=msg_id)
+            if stored_msg:
+                # Group ထဲကို မူရင်းအတိုင်း တ nhất ပုံစံတူ ကူးပြီး ပြန်ဖြေပေးတာ (Forwarded From စာတန်း မပေါ်ဘူး)
+                await event.reply(stored_msg)
+        except Exception as e:
+            print(f"Filter Send Error: {e}")
+            
+@bot1.on(events.NewMessage(incoming=True))
+async def premium_mode_counter_handler(event):
+    global GLOBAL_PREMODE_THRESHOLD, chat_counters
+    
+    # ၁။ Private Chat တွေကို ကျော်မယ်၊ Sender မရှိရင် ကျော်မယ်
+    if event.is_private or not event.sender: return
+    
+    # ၂။ 🤖 Bot တွေ ပို့တဲ့စာဆိုရင် (မင်းရဲ့ Bot ရော၊ အခြား Bot ရော) လုံးဝ မရေတွက်ဘူး ကျော်မယ်
+    if getattr(event.sender, 'bot', False): return
+    
+    # ၃။ / နဲ့စတဲ့ Command တွေကိုလည်း ရေတွက်ခြင်းထဲ မထည့်ဘူး ကျော်မယ်
+    if event.text and event.text.startswith(('/', '.', '@')): return
+    
+    # Bot စတက်တက်ချင်း DB ထဲက Setting ကို တစ်ကြိမ်ပဲ လှမ်းဆွဲယူမယ် (Optimization)
+    if GLOBAL_PREMODE_THRESHOLD is None:
+        config = await premode_col.find_one({"_id": "global_config"})
+        GLOBAL_PREMODE_THRESHOLD = config.get("threshold", 0) if config else 0
+        
+    # ၄။ Premium Mode က 0 (Off) ဖြစ်နေရင် ဘာမှမလုပ်ဘဲ ထွက်မယ်
+    if GLOBAL_PREMODE_THRESHOLD == 0: return
+    
+    chat_id = event.chat_id
+    
+    # ၅။ Group အလိုက် စာစောင်အရေအတွက်ကို RAM ပေါ်မှာ လှမ်းတိုးမယ်
+    if chat_id not in chat_counters:
+        chat_counters[chat_id] = 0
+    chat_counters[chat_id] += 1
+    
+    # ၆။ သတ်မှတ်ထားတဲ့ စာစောင်အရေအတွက် ပြည့်သွားပြီဆိုရင်
+    if chat_counters[chat_id] >= GLOBAL_PREMODE_THRESHOLD:
+        chat_counters[chat_id] = 0  # ရေတွက်မှုကို 0 ပြန်ချမယ်
+        
+        # Scrape လုပ်ထားတဲ့ Premium DB ထဲကနေ စာတွေကို Random တစ်စောင် နှိုက်မယ်
+        pipeline = [{"$sample": {"size": 1}}]
+        cursor = premium_talk_col.aggregate(pipeline)
+        premium_docs = await cursor.to_list(length=1)
+        
+        if premium_docs:
+            storage_msg_id = premium_docs[0]["storage_msg_id"]
             try:
-                if item["type"] == "text": await event.reply(bq(item["content"]), parse_mode='html')
-                else: await event.reply(file=item["content"])
-                break 
-            except: pass
-
+                # Storage Group ထဲက မူရင်း Premium Emoji စာကို ID နဲ့ လှမ်းယူတယ်
+                stored_msg = await bot1.get_messages(STORAGE_CHANNEL, ids=storage_msg_id)
+                if stored_msg:
+                    # 🎲 ၅၀/၅၀ စပ်ပြီး လူကို Reply ပြန်မလား၊ သူ့ဘာသာသူ အလွတ်ပို့မလား ရွေးတာ
+                    action = random.choice(["reply", "send"])
+                    
+                    if action == "reply":
+                        # နောက်ဆုံး စာပြည့်အောင် ရိုက်လိုက်တဲ့လူကို Reply ပြန်မယ်
+                        await event.reply(stored_msg)
+                    else:
+                        # ဘာမှ Reply မပြန်ဘဲ Group ထဲကို သူ့ဘာသာသူ standalone ပို့ချလိုက်မယ်
+                        await bot1.send_message(chat_id, stored_msg)
+            except Exception as e:
+                print(f"Premium Send Error: {e}")
 @bot1.on(events.NewMessage(pattern=r'^/shadow(?:@\w+)?$'))
 async def set_shadow_ban(event):
     if not await is_allowed(event.sender_id): return
