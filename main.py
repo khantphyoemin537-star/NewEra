@@ -1417,7 +1417,6 @@ async def start_system():
     
     # Background Worker Coroutines
     asyncio.create_task(periodic_buffer_flusher())
-    asyncio.create_task(smart_auto_unmute_worker())
     asyncio.create_task(weather_daily_cron_loop())
     
     # Bot ကို အမြဲတမ်း Live ဖြစ်နေအောင် ထိန်းထားပေးမည့်အဆင့်
