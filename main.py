@@ -127,45 +127,7 @@ def bq(text): return f"<blockquote><b>{text}</b></blockquote>"
 
 def owner_tag():
     return f"<a href='https://t.me/{OWNER_USERNAME}'>@{OWNER_USERNAME}</a>"
-
-# 🚀 ADVANCED SYSTEM LOGIC 1: DB BULK WRITE BUFFER
-def track_user_metrics(user_id, username, first_name):
-    if not user_id or user_id in bot_ids: return
     
-    async def _async_buffer():
-        global USER_METRICS_BUFFER
-        async with BUFFER_LOCK:
-            USER_METRICS_BUFFER.append(
-                UpdateOne(
-                    {"user_id": user_id},
-                    {"$set": {
-                        "username": username or "None",
-                        "first_name": first_name or "User",
-                        "last_active": datetime.now(TZ)
-                    }},
-                    upsert=True
-                )
-            )
-            if len(USER_METRICS_BUFFER) >= 100:
-                try:
-                    await users_col.bulk_write(USER_METRICS_BUFFER, ordered=False)
-                    USER_METRICS_BUFFER.clear()
-                except Exception as e:
-                    await report_system_error("Metrics Bulk Write Buffer", e)
-    asyncio.create_task(_async_buffer())
-
-async def periodic_buffer_flusher():
-    global USER_METRICS_BUFFER
-    while True:
-        await asyncio.sleep(30)
-        if USER_METRICS_BUFFER:
-            async with BUFFER_LOCK:
-                try:
-                    await users_col.bulk_write(USER_METRICS_BUFFER, ordered=False)
-                    USER_METRICS_BUFFER.clear()
-                except Exception as e:
-                    await report_system_error("Periodic Buffer Flusher", e)
-
 # 🚀 ADVANCED SYSTEM LOGIC 2: COMMAND COOLDOWN RATE-LIMITER
 async def is_on_cooldown(user_id, command_name, cooldown_seconds=3):
     if user_id == OWNER_ID: return False, 0
