@@ -1923,7 +1923,7 @@ async def richest_leaderboard_handler(event):
 # ==========================================
 # 🔘 UNIFIED CALLBACK QUERY MATRIX PROCESSOR EXTENSIONS
 # ==========================================
-@bot1.on(events.CallbackQuery) function အောက်က if/elif အစုစုထဲမှာ ဒါလေးတွေ ထည့်ပေးပါ-
+@bot1.on(events.CallbackQuery) #function အောက်က if/elif အစုစုထဲမှာ ဒါလေးတွေ ထည့်ပေးပါ-
 async def unified_callback_matrix_processor(event):
     if not event.data:
         return
