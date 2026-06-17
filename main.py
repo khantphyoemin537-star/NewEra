@@ -1901,10 +1901,44 @@ async def scrap_card_handler(event):
         f"<blockquote><b>အိုင်တမ်အား အောင်မြင်စွာ ဖျက်ဆီးပြီး ငွေပြန်အမ်းပေးလိုက်ပါပြီ Boss!</b></blockquote>"
     )
     await event.reply(scrap_msg, parse_mode='html')
+
+# ==========================================
+# 🏆 CASINO RICHEST MATRIX (/richest)
+# ==========================================
+@bot1.on(events.NewMessage(pattern=r'^/richest$'))
+async def richest_leaderboard_handler(event):
+    cursor = users_catcher_col.find({"wallet_balance": {"$gt": 0}}).sort("wallet_balance", -1).limit(10)
+    richest_users = await cursor.to_list(length=10)
+    
+    if not richest_users:
+        return await event.reply(f"🏆 <b>{f('Leaderboard matrix data clear ဖြစ်နေပါတယ် Bro!')}</b>", parse_mode='html')
+        
+    msg = f"💰 <b>{f('BODကာစီနိုနဲ့Cardဖမ်းလောကရဲ့ - TOP 10 RICHEST players')}</b>\n⚡ ━━━━━⚡\n"
+    for i, u in enumerate(richest_users):
+        bal = u.get("wallet_balance", 0)
+        user_display = u.get('fullname') or f"User {u['user_id']}"
+        msg += f"<b>{i+1}.</b> {user_display} — <code>{bal:,} MMK</code> 🪙\n"
+    msg += f"\nFamily Cluster: <b>Brotherhood of Dexter</b>"
+    await event.reply(msg, parse_mode='html')
 # ==========================================
 # 🔘 UNIFIED CALLBACK QUERY MATRIX PROCESSOR EXTENSIONS
 # ==========================================
-# ဘရိုရဲ့ @bot1.on(events.CallbackQuery) function အောက်က if/elif အစုစုထဲမှာ ဒါလေးတွေ ထည့်ပေးပါ-
+@bot1.on(events.CallbackQuery) function အောက်က if/elif အစုစုထဲမှာ ဒါလေးတွေ ထည့်ပေးပါ-
+async def unified_callback_matrix_processor(event):
+    if not event.data:
+        return
+        
+    # ⚡ Callback Data ကို String ပြောင်းပြီး '_' နဲ့ ခွဲထုတ်ပေးတဲ့ နှလုံးသားအပိုင်း
+    try:
+        data_str = event.data.decode('utf-8')
+        data_parts = data_str.split('_')
+        action_type = data_parts[0]
+    except Exception:
+        return
+
+    # 🛑 ပထမဆုံး စဖွင့်မယ့် 'if' အခြေအနေ (ဒါက ဘရိုရဲ့ နဂိုမူလ code တစ်ခုခု ဖြစ်ရပါမယ်)
+    if action_type == "test":
+        await event.answer("System Testing Status: OK ✔️", alert=True)
 
     elif action_type == "mktbuy":
         listing_id = data_parts[1]
@@ -1992,25 +2026,6 @@ async def scrap_card_handler(event):
         await users_catcher_col.update_one({"user_id": sender_id}, {"$set": {"harem": s_harem}})
         await users_catcher_col.update_one({"user_id": target_id}, {"$set": {"harem": t_harem}})
         await event.edit(f"🤝 <b>{f('TRADE CONCLUDED / ကတ်လဲလှယ်ခြင်း လုပ်ငန်းစဉ် အောင်မြင်စွာ ပြီးဆုံးပါပြီ။ 🔥')}</b>", parse_mode='html')
-
-# ==========================================
-# 🏆 CASINO RICHEST MATRIX (/richest)
-# ==========================================
-@bot1.on(events.NewMessage(pattern=r'^/richest$'))
-async def richest_leaderboard_handler(event):
-    cursor = users_catcher_col.find({"wallet_balance": {"$gt": 0}}).sort("wallet_balance", -1).limit(10)
-    richest_users = await cursor.to_list(length=10)
-    
-    if not richest_users:
-        return await event.reply(f"🏆 <b>{f('Leaderboard matrix data clear ဖြစ်နေပါတယ် Bro!')}</b>", parse_mode='html')
-        
-    msg = f"💰 <b>{f('BODကာစီနိုနဲ့Cardဖမ်းလောကရဲ့ - TOP 10 RICHEST players')}</b>\n⚡ ━━━━━⚡\n"
-    for i, u in enumerate(richest_users):
-        bal = u.get("wallet_balance", 0)
-        user_display = u.get('fullname') or f"User {u['user_id']}"
-        msg += f"<b>{i+1}.</b> {user_display} — <code>{bal:,} MMK</code> 🪙\n"
-    msg += f"\nFamily Cluster: <b>Brotherhood of Dexter</b>"
-    await event.reply(msg, parse_mode='html')
 
 # ====================================================================================
 # 💀 BULlY & SHADOW BAN SYSTEM
