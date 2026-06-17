@@ -58,7 +58,6 @@ MAIN_BOT_TOKEN = "8575371720:AAEWWV42CGrwooM_joiJXdo2iEw2_7atyXU"
 
 SPECIFIC_GROUP = -1003580630981 
 SPECIFIC_CONTROL_GROUP = -1003580630981
-STORAGE_CHANNEL = -1003580630981
 TZ = pytz.timezone('Asia/Yangon')
 
 # ==========================================
@@ -79,13 +78,6 @@ morgan_col = db["morgan_talk"]
 rank_col = db["rank_col"]
 system_col = db["system_col"]
 reply_save_col = db["reply_save_col"]
-
-# 📊 TRACKING & GAME SYSTEMS COLLECTIONS
-users_col = db["tracked_users"] 
-muted_registry_col = db["muted_registry"]
-characters_col = db["game_characters"]
-user_game_profiles_col = db["user_game_profiles"]
-group_spawn_state_col = db["group_spawn_state"]
 
 # ==========================================
 # 🤖 CLIENT SETUP (SINGLE BOT)
@@ -117,7 +109,6 @@ IS_REPLY_ACTIVE = False
 REPLY_INTERVAL = 4                   
 GLOBAL_TALK_INTERVAL = 6            
 reply_msg_counters = {}              
-active_card_games = {}
 # 💎 PREMIUM MATHEMATICAL BOLD SERIF FONT CONVERTER
 def f(text):
     normal = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
@@ -225,22 +216,6 @@ async def smart_auto_unmute_worker():
         except Exception as e:
             await report_system_error("Auto Unmute Worker Loop", e)
         await asyncio.sleep(10)
-
-# ==========================================
-# 🎮 GAME CONFIGURATION & ENGINE (MAIN 60)
-# ==========================================
-async def ensure_game_profile(user_id, first_name):
-    profile = await user_game_profiles_col.find_one({"user_id": user_id})
-    if not profile:
-        profile = {
-            "user_id": user_id,
-            "first_name": first_name,
-            "coins": 5000, 
-            "caught_cards": []
-        }
-        await user_game_profiles_col.insert_one(profile)
-    return profile
-
 # ==========================================
 # 🌤️ MYANMAR WEATHER DASHBOARD DATA ENGINE
 # ==========================================
@@ -265,7 +240,7 @@ def generate_weather_text(region_id):
     data = WEATHER_REGIONS_DATA.get(region_id)
     if not data: return "အချက်အလက် မရှိပါ။"
     return (
-        f"🌤️ <b><u>မိုးလေဝသနှင့် ရာသီဥတု အစီရင်ခံစာ</u></b>\n"
+        f"🌤️ <b><u>မိုးလေဝသနှင့် ရာသီဥတု</u></b>\n"
         f"📍 <b>တိုင်းဒေသကြီး/ပြည်နယ်:</b> <code>{data['name']}</code>\n"
         f"🌡️ <b>လက်ရှိအပူချိန်:</b> <code>{data['temp']}</code>\n"
         f"☁️ <b>မိုးလေဝသ အခြေအနေ:</b> <code>{data['condition']}</code>\n"
@@ -278,7 +253,7 @@ async def weather_daily_cron_loop():
     while True:
         try:
             now = datetime.now(TZ)
-            if now.hour == 6 and now.minute == 0:
+            if now.hour == 20 and now.minute == 0:
                 summary_text = (
                     f"☀️ <b>မြန်မာနိုင်ငံလုံးဆိုင်ရာ နေ့စဉ် မိုးလေဝသသတင်းစလွှာ</b>\n"
                     f"📅 <b>နေ့စွဲ:</b> <code>{now.strftime('%Y-%m-%d')}</code>\n\n"
@@ -416,10 +391,9 @@ async def system_start_router(event):
     
     bot_me = await bot1.get_me()
     welcome_msg = (
-        f"🌌 <b>𝑩𝑶𝑫 𝑺𝒐𝒗𝒆𝒓𝒆𝒊𝒈𝒏 𝑺𝒚𝒔𝒕𝒆𝒎 𝑷𝒍𝒖𝒔 𝑬𝒏𝒈𝒊𝒏𝒆</b>\n"
-        f"🛸 ───────────────────\n"
-        f"🤖 ကျွန်ုပ်သည် Telegram Groups များကို အလိုအလျောက် အဆင့်မြင့်ဆုံး ထိန်းချုပ်ပေးနိုင်သော စနစ်ဖြစ်ပြီး "
-        f"ပျော်ရွှင်စရာ Anime Card Spawning Game စနစ်များပါ ပါဝင်ဖွဲ့စည်းထားသော Production-level Bot ဖြစ်ပါသည်။\n\n"
+        f"🌌 <b>𝑩𝑶𝑫 𝑺𝒚𝒔𝒕𝒆𝒎 𝑷𝒍𝒖𝒔 𝑬𝒏𝒈𝒊𝒏𝒆</b>\n"
+        f"ကျွန်ုပ်သည် Telegram Groups များကို အလိုအလျောက် အဆင့်မြင့်ဆုံး ထိန်းချုပ်ပေးနိုင်သော စနစ်ဖြစ်ပြီး "
+        f"ပျော်ရွှင်စရာ Charater Card Spawning နှင့် /Game နှင့် စကားပြော စာထောက် စနစ်များပါ ပါဝင်ဖွဲ့စည်းထားသော Production-level Bot ဖြစ်ပါသည်။\n\n"
         f"💡 အောက်ပါ Inline Buttons များကို အသုံးပြု၍ လုပ်ငန်းဆောင်တာများနှင့် ကစားနည်းလမ်းညွှန်များကို အလွယ်တကူ လေ့လာနိုင်ပါသည် Chief။"
     )
     buttons = [
@@ -459,45 +433,46 @@ async def system_callback_router(event):
     if data == "nav_back_home":
         bot_me = await bot1.get_me()
         welcome_msg = (
-            f"🌌 <b>𝑩𝑶𝑫 𝑺𝒐𝒗𝒆𝒓𝒆𝒊𝒈𝒏 𝑺𝒚𝒔𝒕𝒆𝒎 𝑷𝒍𝒖𝒔 𝑬𝒏𝒈𝒊𝒏𝒆</b>\n"
-            f"🛸 ───────────────────\n"
+            f"🌌 <b>𝑩𝑶𝑫 𝑺𝒚𝒔𝒕𝒆𝒎 𝑷𝒍𝒖𝒔 𝑬𝒏𝒈𝒊𝒏𝒆</b>\n"
             f"🤖 ကျွန်ုပ်သည် Telegram Groups များကို အလိုအလျောက် အဆင့်မြင့်ဆုံး ထိန်းချုပ်ပေးနိုင်သော စနစ်ဖြစ်ပြီး "
-            f"ပျော်ရွှင်စရာ Anime Card Spawning Game စနစ်များပါ ပါဝင်ဖွဲ့စည်းထားသော Production-level Bot ဖြစ်ပါသည်။"
+            f"ပျော်ရွှင်စရာ Charater Card Spawning နှင့် /Game နှင့် စကားပြော စာထောက် စနစ်များ ပါဝင်ဖွဲ့စည်းထားသော Production-level Bot ဖြစ်ပါသည်။"
         )
         buttons = [
-            [Button.inline("⚙️ Operational Commands", data="nav_help_main"), Button.inline("🎮 Catching Game Rules", data="nav_game_main")],
-            [Button.url("🪐 Add Me To Your Group Chat 🪐", f"https://t.me/{bot_me.username}?startgroup=true")],
-            [Button.url("👥 Support Brotherhood Community", "https://t.me/Comeback_BoD")]
+            [Button.inline("Operational Commands", data="nav_help_main"), Button.inline("🎮 Catching Game Rules", data="nav_game_main")],
+            [Button.url("Add Me To Your Group Chat", f"https://t.me/{bot_me.username}?startgroup=true")],
+            [Button.url("Support Brotherhood Group", "https://t.me/Comeback_BoD")]
         ]
         return await event.edit(bq(welcome_msg), parse_mode='html', buttons=buttons)
 
     elif data == "nav_help_main":
         help_text = (
             f"⚙️ <b><u>Operational Moderation Terminal</u></b>\n\n"
-            f"🛠️ <code>/id</code> - မိမိ သို့မဟုတ် ရည်ညွှန်းသူ၏ Profile ID Matrix အား ထုတ်ယူခြင်း။\n"
-            f"🛠️ <code>/mute [Reply]</code> - စည်းကမ်းဖောက်ဖျက်သူအား စကားပြောခွင့် ကန့်သတ်ခြင်း။\n"
-            f"🛠️ <code>/unmute [Reply]</code> - ကန့်သတ်ချက်များအား ပြန်လည်ရုပ်သိမ်းပေးခြင်း။\n"
-            f"🛠️ <code>/ban [Reply]</code> - အဖွဲ့ဝင်အဖြစ်မှ ထာဝရထုတ်ပယ် (Exile) ပြုလုပ်ခြင်း။\n"
-            f"🛠️ <code>/kick [Reply]</code> - လက်ရှိ Chat Sector မှ ချက်ချင်း ဖယ်ရှားခြင်း။\n"
-            f"🛠️ <code>/adm [Text]</code> - လက်ရှိ Group အတွင်းရှိ ရုံးထိုင် အရာရှိ (Admins) အားလုံးကို Tag ခေါ်ယူခြင်း။\n"
-            f"🛠️ <code>/calc [Expression]</code> - လျင်မြန်ဘေးကင်းသော သင်္ချာတွက်ချက်မှု Engine။\n"
-            f"🛠️ <code>/weather</code> - မြန်မာတစ်နိုင်ငံလုံးဆိုင်ရာ ရာသီဥတု တိုင်းတာရေး Dashboard အား ခေါ်ယူခြင်း။"
+            f" <code>/id</code> - မိမိ သို့မဟုတ် ရည်ညွှန်းသူ၏ Profile ID Matrix အား ထုတ်ယူခြင်း။\n"
+            f" <code>/mute [Reply]</code> - စည်းကမ်းဖောက်ဖျက်သူအား စကားပြောခွင့် ကန့်သတ်ခြင်း။\n"
+            f" <code>/unmute [Reply]</code> - ကန့်သတ်ချက်များအား ပြန်လည်ရုပ်သိမ်းပေးခြင်း။\n"
+            f" <code>/ban [Reply]</code> - အဖွဲ့ဝင်အဖြစ်မှ ထာဝရထုတ်ပယ် (Exile) ပြုလုပ်ခြင်း။\n"
+            f" <code>/kick [Reply]</code> - လက်ရှိ Chat Sector မှ ချက်ချင်း ဖယ်ရှားခြင်း။\n"
+            f" <code>/adm [Text]</code> - လက်ရှိ Group အတွင်းရှိ (Admins) အားလုံးကို Tag ခေါ်ယူခြင်း။\n"
+            f" <code>/calc [Expression]</code> - မြန်ဆန်မှန်ကန်သော သင်္ချာတွက်ချက်မှု Engine။\n"
+            f" <code>/weather</code> - မြန်မာတစ်နိုင်ငံလုံးဆိုင်ရာ ရာသီဥတု တိုင်းတာရေး Dashboard အား ခေါ်ယူခြင်း။"
         )
         return await event.edit(bq(help_text), parse_mode='html', buttons=[[Button.inline("🔙 Back Menu", data="nav_back_home")]])
 
     elif data == "nav_game_main":
         game_text = (
-            f"🎮 <b><u>BoD Anime Catching Game Console</u></b>\n\n"
-            f"⭐ <code>/hai</code> သို့မဟုတ် <code>/profile</code>\n"
-            f"<blockquote><b>မိမိပိုင်ဆိုင်သော ငွေသားပမာဏ၊ စုဆောင်းမိထားသော ကတ်ထုပ်များနှင့် Level Stats များကို စစ်ဆေးကြည့်ရှုခြင်း။</b></blockquote>\n"
-            f"⭐ <code>/catch [Character Name]</code>\n"
-            f"<blockquote><b>ဂရုထဲတွင် စာစုဆောင်းမှု ပြည့်မြောက်၍ ပေါ်ထွက်လာသော Anime ကတ်ပြားအား အမြန်ဆုံး ဖမ်းယူသိမ်းဆည်းခြင်း။</b></blockquote>\n\n"
-            f"⚠️ <b><u>ပြည်သူ့ဝန်ထမ်း အရာရှိကြီးများ အသုံးပြုရန် (Admin Utilities):</u></b>\n"
-            f"⚙️ <code>/addchar [Name] | [Rarity] | [Media Link]</code> - စနစ်ထဲသို့ ကတ်အသစ် တည့်သွင်းခြင်း။\n"
-            f"⚙️ <code>/fspawn</code> သို့မဟုတ် <code>/haii</code> - မက်ဆေ့ခ်ျရေတွက်မှုကို ကျော်ဖြတ်ပြီး ကတ်တစ်ခု ချက်ချင်း Spawn ထုတ်ခြင်း။\n"
-            f"⚙️ <code>/haitime [Count]</code> - အလိုအလျောက် ကတ်ထွက်မည့် သတ်မှတ်စာစောင်ရေ ပြောင်းလဲခြင်း။\n"
-            f"⚙️ <code>/cleanhai</code> - အချက်အလက်များ လျင်မြန်ပေါ့ပါးစေရန် Database ဇယားများအား အသစ်ပြန်လည် ရှင်းလင်းခြင်း။"
+            f"🎮 <b><u>BoD Game Console</u></b>\n\n"
+            f"⭐ <code>/checkp</code>\n"
+            f"<blockquote><b>မိမိပိုင်ဆိုင်သော ငွေလက်ကျန်ပမာဏကို စစ်ဆေးကြည့်ရှုခြင်း။</b></blockquote>\n\n"
+            f"⭐ <code>/daily</code>\n"
+            f"<blockquote><b>နေ့စဥ်ထုတ်ယူနိုင်သော ငွေကြေးအား ရယူခြင်း။</b></blockquote>\n\n"
+            f"⭐ <code>/hunt</code>\n"
+            f"<blockquote><b>နေ့စဥ် Hunt ပြုလုပ်ပြီး ငွေကြေးများ ရှာဖွေစုဆောင်းခြင်း။</b></blockquote>\n\n"
+            f"⭐ <code>/pay [Amount] [Username/ID]</code>\n"
+            f"<blockquote><b>အခြားသူများထံသို့ ငွေကြေးများ လွှဲပြောင်းပေးပို့ခြင်း။</b></blockquote>\n\n"
+            f"⭐ <code>/game</code>\n"
+            f"<blockquote><b>လက်ရှိဆော့ကစားနိုင်သော ဂိမ်း Menu များကို ကြည့်ရှုခြင်း။</b></blockquote>"
         )
+
         return await event.edit(bq(game_text), parse_mode='html', buttons=[[Button.inline("🔙 Back Menu", data="nav_back_home")]])
 
 # COMMANDS INTERCEPTORS
@@ -506,30 +481,17 @@ async def direct_help_handler(event):
     is_cd, rem = await is_on_cooldown(event.sender_id, "helpp", 2)
     if is_cd: return
     help_text = (
-        f"⚙️ <b><u>Operational Moderation Terminal</u></b>\n\n"
-        f"🛠️ <code>/id</code> - Profile ID Matrix ထုတ်ယူခြင်း။\n"
-        f"🛠️ <code>/mute</code> - စကားပြောခွင့် ကန့်သတ်ခြင်း။\n"
-        f"🛠️ <code>/unmute</code> - ကန့်သတ်ချက် ရုပ်သိမ်းခြင်း။\n"
-        f"🛠️ <code>/ban</code> - အဖွဲ့ဝင်အဖြစ်မှ ထာဝရထုတ်ပယ်ခြင်း။\n"
-        f"🛠️ <code>/kick</code> - Chat Sector မှ ဖယ်ရှားခြင်း။\n"
-        f"🛠️ <code>/adm</code> - Group Admins အားလုံးကို Tag ခေါ်ယူခြင်း။\n"
-        f"🛠️ <code>/calc</code> - သင်္ချာတွက်ချက်မှု စနစ်။\n"
-        f"🛠️ <code>/weather</code> - မိုးလေဝသ တိုင်းဒေသကြီးများ Dashboard။"
+        f" <b><u>Operational Moderation Terminal</u></b>\n\n"
+        f" <code>/id</code> - Profile ID Matrix ထုတ်ယူခြင်း။\n"
+        f" <code>/mute</code> - စကားပြောခွင့် ကန့်သတ်ခြင်း။\n"
+        f" <code>/unmute</code> - ကန့်သတ်ချက် ရုပ်သိမ်းခြင်း။\n"
+        f" <code>/ban</code> - အဖွဲ့ဝင်အဖြစ်မှ ထာဝရထုတ်ပယ်ခြင်း။\n"
+        f" <code>/kick</code> - Chat Sector မှ ဖယ်ရှားခြင်း။\n"
+        f" <code>/adm</code> - Group Admins အားလုံးကို Tag ခေါ်ယူခြင်း။\n"
+        f" <code>/calc</code> - သင်္ချာတွက်ချက်မှု စနစ်။\n"
+        f" <code>/weather</code> - မိုးလေဝသ တိုင်းဒေသကြီးများ Dashboard။"
     )
     await event.respond(bq(help_text), parse_mode='html', buttons=[[Button.inline("⚙️ Navigation Home", data="nav_back_home")]])
-
-@bot1.on(events.NewMessage(pattern=r'^/game$'))
-async def direct_game_guide_handler(event):
-    is_cd, rem = await is_on_cooldown(event.sender_id, "game", 2)
-    if is_cd: return
-    game_text = (
-        f"🎮 <b><u>BoD Anime Catching Game Console</u></b>\n\n"
-        f"⭐ <code>/hai</code> သို့မဟုတ် <code>/profile</code> - ကိုယ်ပိုင် Stats စစ်ဆေးခြင်း။\n"
-        f"⭐ <code>/catch [Name]</code> - ပေါ်လာသော ကတ်ပြားအား ဖမ်းယူခြင်း။\n"
-        f"⚙️ <code>/fspawn</code> - ကတ်တစ်ခု ချက်ချင်း Force Spawn ထုတ်ခြင်း။\n"
-        f"⚙️ <code>/haitime [Count]</code> - Spawn စာစောင်ရေ ပြောင်းလဲခြင်း။"
-    )
-    await event.respond(bq(game_text), parse_mode='html', buttons=[[Button.inline("⚙️ Navigation Home", data="nav_back_home")]])
 
 # ====================================================================================
 # 🌤️ ADVANCED SYSTEM LOGIC 6: INTERACTIVE WEATHER DASHBOARD & COMMAND
@@ -673,14 +635,14 @@ async def system_analytics_matrix(event):
         active_24h_users = await users_col.count_documents({"last_active": {"$gte": day_ago}})
         
         metrics_layout = (
-            f"🌌 <b>𝙎𝙊𝙑𝙀𝙍𝙀𝙄𝙂🇳 𝘼𝙉𝘼𝙇𝙔𝙏𝙄𝘾𝙎 𝙈𝘼𝙏𝙍𝙄𝙦</b>\n"
+            f"🌌 <b>MAU Stats</b>\n"
             f"🛸 ───────────────────\n"
             f"👥 <b>Total Managed Users:</b> <code>{total_tracked_users} 👤</code>\n"
             f"🔥 <b>Active Users (24H):</b> <code>{active_24h_users} 🔥</code>\n"
-            f"📍 <b>Sovereign Sectors (Groups):</b> <code>{total_active_groups} 🪐</code>\n"
+            f"📍 <b>ထည့်သွင်းအသုံးပြုနေသော (Groups):</b> <code>{total_active_groups} 🪐</code>\n"
             f"⚙️ <b>Engine Status:</b> <code>High-Speed Optimized (No Delay)</code>\n"
             f"🛸 ───────────────────\n"
-            f"💡 <i>Telegram API ကို အသုံးမပြုဘဲ Internal Matrix မှ တိုက်ရိုက်တွက်ချက်ထားသဖြင့် ၁၀၀% တိကျပါသည်။</i>"
+            f"💡 <i>Telegram API ကို အသုံးမပြုဘဲ Internal Matrix မှ တိုက်ရိုက်တွက်ချက်ထားသဖြင့် 100% တိကျပါသည်။</i>"
         )
         await loading.edit(bq(metrics_layout), parse_mode='html')
     except Exception as e:
@@ -854,7 +816,7 @@ async def get_identity_matrix_handler(event):
         group_section = f"📍 <b>Sector:</b> <code>Private Chat (No Group ID)</code>\n"
 
     matrix_text = (
-        f"🌌 <b>𝙄𝘿 𝙈𝘼𝙏𝙍𝙄𝙦</b>\n"
+        f"🌌 <b>𝙄𝘿 🤓</b>\n"
         f"👤 <b>{user_type}:</b> {mention}\n"
         f"🆔 <b>User ID:</b> <code>{target_id}</code>\n\n"
         f"{group_section}"
@@ -887,7 +849,6 @@ async def mute_user(event):
         mention = f"<a href='tg://user?id={target_user.id}'>{escape_html(getattr(target_user, 'first_name', 'User'))}</a>"
         mute_text = (
             f"🌌 <b>𝙈𝙐𝙏𝙀 𝙊𝙋𝙀𝙍𝘼𝙏𝙄𝙊𝙉</b>\n"
-            f"🛸 ───────────────────\n"
             f"🔇 <b>Target:</b> {mention}\n"
             f"🆔 <b>User ID:</b> <code>{target_user.id}</code>\n"
             f"⚡ <b>Status:</b> <code>Muted (မြုပြီး)</code>"
@@ -986,7 +947,7 @@ async def inline_unmute_callback(event):
             
         mention = f"<a href='tg://user?id={target_id}'>{name}</a>"
         updated_text = (
-            f"🌌 <b>𝙈𝙐𝙏𝙀 𝙎𝙔𝙎𝙏𝙀𝙈 𝙐評𝘿𝘼𝙏𝙀</b>\n"
+            f"🌌 <b>𝙈𝙐𝙏𝙀 𝙎𝙔𝙎𝙏𝙀𝙈 (UPDATED)</b>\n"
             f"🔊 {mention} has been <b>Unmuted</b> via administrative console.\n"
             f"⚡ <b>Status:</b> <code>Restrictions Disintegrated</code>"
         )
@@ -1017,8 +978,8 @@ async def tag_admins(event):
         compact_admin_list = "  •  ".join(admin_mentions)
         adm_signal_text = (
             f"📢 <b>Broadcast:</b> <code>{escape_html(text)}</code>\n\n"
-            f"🌌 <b>𝘼𝘿𝙈𝙄🇳 𝘼𝙎𝙎𝙀𝙈𝘽𝙇𝙔 𝙎𝙄𝙂𝙉𝘼𝙇</b>\n"
-            f"🛡️ <b>Active Officers:</b>\n"
+            f"🌌 <b>အက်ဒမင်များ ခဏလာကြတဲ့</b>\n"
+            f"🛡️ <b>🦦:</b>\n"
             f"{compact_admin_list}"
         )
         await event.respond(bq(adm_signal_text), parse_mode='html')
@@ -1226,161 +1187,6 @@ async def close_playlist_callback(event):
         await event.answer("🔒 Playlist Terminated!", alert=True)
     except Exception as e: print(f"Callback Error: {e}")
 
-# ====================================================================================
-# 👾 CORE GAME UTILITIES HANDLERS (MAIN 60 INTEGRATION)
-# ====================================================================================
-DEFAULT_SPAWN_INTERVAL = 15
-
-@bot1.on(events.NewMessage(pattern=r'^/addchar\s+(.*)'))
-async def game_add_character_handler(event):
-    if not await is_allowed(event.sender_id): return
-    try:
-        segments = event.pattern_match.group(1).split('|')
-        if len(segments) < 3:
-            return await event.reply(bq("⚠️ <b>အသုံးပြုပုံစံမှားယွင်းနေပါသည်:</b>\n<code>/addchar Name | Rarity | Image_URL_or_FileID</code>"), parse_mode='html')
-        
-        char_name = segments[0].strip()
-        rarity = segments[1].strip()
-        media_id = segments[2].strip()
-        
-        await characters_col.update_one(
-            {"name": char_name},
-            {"$set": {"rarity": rarity, "media": media_id}},
-            upsert=True
-        )
-        await event.reply(bq(f"✅ <b>Character Added Successfully:</b>\n🎭 <b>အမည်:</b> {f(char_name)}\n💎 <b>Rarity:</b> {rarity}"), parse_mode='html')
-    except Exception as e:
-        await report_system_error("Game Add Character Engine", e)
-
-@bot1.on(events.NewMessage(pattern=r'^/(?:hai|profile)$'))
-async def game_profile_handler(event):
-    is_cd, rem = await is_on_cooldown(event.sender_id, "profile", 2)
-    if is_cd: return
-    
-    sender = await event.get_sender()
-    fullname = getattr(sender, 'first_name', 'User')
-    profile = await ensure_game_profile(event.sender_id, fullname)
-    
-    cards_count = len(profile.get("caught_cards", []))
-    profile_layout = (
-        f"🎮 <b><u>{f(fullname)}'s Galactic Ledger Profile</u></b>\n"
-        f"🛸 ───────────────────\n"
-        f"💰 <b>Wallet Balance:</b> <code>{f(profile['coins'])} Gold Coins 🪙</code>\n"
-        f"🃏 <b>Total Caught Cards:</b> <code>{f(cards_count)} Cards 🗃️</code>\n"
-        f"🪐 <b>Rank Sector status:</b> <code>Active Player</code>\n"
-        f"🛸 ───────────────────"
-    )
-    await event.respond(bq(profile_layout), parse_mode='html')
-
-@bot1.on(events.NewMessage(pattern=r'^/(?:fspawn|haii)$'))
-async def game_force_spawn_handler(event):
-    if event.is_private: return
-    if not await check_admin(event.chat_id, event.sender_id): return
-    
-    count = await characters_col.count_documents({})
-    if count == 0: return await event.respond(bq("❌ Database ထဲမှာ မည်သည့် Character မှ ထည့်သွင်းထားခြင်း မရှိသေးပါ Chief။"))
-    
-    random_cursor = characters_col.aggregate([{"$sample": {"size": 1}}])
-    docs = await random_cursor.to_list(length=1)
-    target_char = docs[0]
-    
-    await group_spawn_state_col.update_one(
-        {"chat_id": event.chat_id},
-        {"$set": {"active_character": target_char["name"]}},
-        upsert=True
-    )
-    
-    spawn_txt = (
-        f"🔮 <b>🌌 𝘼𝙉𝙄𝙈𝙀 𝘾𝘼𝙍𝘿 𝙎𝙋𝘼𝙒𝙉𝙀𝘿 🌌</b>\n"
-        f"🛸 ───────────────────\n"
-        f"💎 <b>Rarity Status:</b> <code>{target_char['rarity']}</code>\n"
-        f"💡 အဆိုပါ ဇာတ်ကောင်အား သင်၏ Collection ထဲသို့ ဖမ်းယူသိမ်းဆည်းရန် အောက်ပါအတိုင်း ရိုက်နှိပ်ပါChief-\n"
-        f"👉 <code>/catch {target_char['name']}</code>"
-    )
-    await bot1.send_message(event.chat_id, bq(spawn_txt), file=target_char["media"], parse_mode='html')
-
-@bot1.on(events.NewMessage(pattern=r'^/catch\s+(.*)'))
-async def game_catch_handler(event):
-    if event.is_private: return
-    is_cd, rem = await is_on_cooldown(event.sender_id, "catch", 1)
-    if is_cd: return
-    
-    attempt_name = event.pattern_match.group(1).strip().lower()
-    state = await group_spawn_state_col.find_one({"chat_id": event.chat_id})
-    
-    if not state or not state.get("active_character"):
-        return await event.reply(bq("❌ လက်ရှိ Sector တွင် ဖမ်းယူရန် မည်သည့်ကတ်မှ ထွက်ပေါ်မနေပါ ဘရို။"), parse_mode='html')
-    
-    correct_name = state["active_character"]
-    if attempt_name == correct_name.lower():
-        await group_spawn_state_col.delete_one({"chat_id": event.chat_id})
-        sender = await event.get_sender()
-        fullname = getattr(sender, 'first_name', 'User')
-        
-        await ensure_game_profile(event.sender_id, fullname)
-        reward_coins = random.randint(1000, 3000)
-        
-        await user_game_profiles_col.update_one(
-            {"user_id": event.sender_id},
-            {"$inc": {"coins": reward_coins}, "$push": {"caught_cards": correct_name}}
-        )
-        
-        success_msg = (
-            f"🎉 <b>𝙂𝘼𝙈𝙀 𝘾𝘼𝙏𝘾𝙃 𝙎𝙐𝘾𝘾𝙀𝙎𝙎𝙁𝙐𝙇!</b>\n\n"
-            f"👤 <b>Player:</b> <a href='tg://user?id={event.sender_id}'>{escape_html(fullname)}</a>\n"
-            f"🃏 <b>Caught Character:</b> <code>{f(correct_name)}</code>\n"
-            f"🪙 <b>Bonus Earned:</b> <code>+{f(reward_coins)} Gold Coins</code>"
-        )
-        await event.reply(bq(success_msg), parse_mode='html')
-    else:
-        await event.reply(bq("❌ ဇာတ်ကောင်အမည် မှားယွင်းနေပါသည်။ စာလုံးပေါင်း သေချာပြန်စစ်ပြီးမှ ထပ်မံကြိုးစားပါ Chief။"), parse_mode='html')
-
-@bot1.on(events.NewMessage(pattern=r'^/haitime\s+(\d+)'))
-async def game_change_haitime_handler(event):
-    if not await check_admin(event.chat_id, event.sender_id): return
-    new_interval = int(event.pattern_match.group(1))
-    await system_col.update_one(
-        {"chat_id": event.chat_id, "type": "spawn_config"},
-        {"$set": {"interval": new_interval}},
-        upsert=True
-    )
-    await event.reply(bq(f"⚙️ <b>System Config Updated:</b> အလိုအလျောက် ကတ်ထွက်မည့် သတ်မှတ်စာစောင်ရေအား <code>{new_interval}</code> စောင်သို့ ပြောင်းလဲသတ်မှတ်လိုက်ပါပြီ။"), parse_mode='html')
-
-@bot1.on(events.NewMessage(pattern=r'^/give\s+(\d+)'))
-async def game_give_coins_handler(event):
-    if not await is_allowed(event.sender_id): return
-    reply = await event.get_reply_message()
-    if not reply: return await event.reply(bq("⚠️ ဒင်္ဂါးပြား ထုတ်ပေးလိုသည့် Player ၏ မက်ဆေ့ခ်ျအား Reply ပြန်၍ သုံးပေးပါ Chief။"), parse_mode='html')
-    
-    amount = int(event.pattern_match.group(1))
-    target_user = await reply.get_sender()
-    target_name = getattr(target_user, 'first_name', 'User')
-    
-    await ensure_game_profile(reply.sender_id, target_name)
-    await user_game_profiles_col.update_one({"user_id": reply.sender_id}, {"$inc": {"coins": amount}})
-    await event.respond(bq(f"🪙 <b>Administrative Grant:</b> {f(target_name)} ထံသို့ ရွှေဒင်္ဂါး <code>{f(amount)}</code> ပြားအား အခမဲ့ ထုတ်ပေးလိုက်ပါပြီ။"), parse_mode='html')
-
-@bot1.on(events.NewMessage(pattern=r'^/takeall\s+(\d+)'))
-async def game_takeall_coins_handler(event):
-    if event.sender_id != OWNER_ID: return
-    amount = int(event.pattern_match.group(1))
-    await user_game_profiles_col.update_many({}, {"$inc": {"coins": -amount}})
-    await event.respond(bq(f"⚖️ <b>System Penalization Matrix:</b> Database အတွင်းရှိ ကစားသမား အားလုံးထံမှ ရွှေဒင်္ဂါး <code>{f(amount)}</code> ပြားစီအား အဓမ္မ သိမ်းဆည်းလိုက်ပါပြီ။"), parse_mode='html')
-
-@bot1.on(events.NewMessage(pattern=r'^/giftall\s+(\d+)'))
-async def game_giftall_coins_handler(event):
-    if event.sender_id != OWNER_ID: return
-    amount = int(event.pattern_match.group(1))
-    await user_game_profiles_col.update_many({}, {"$inc": {"coins": amount}})
-    await event.respond(bq(f"🎁 <b>Sovereign Global Gift:</b> Database အတွင်းရှိ ကစားသမား အားလုံးထံသို့ တစ်ဦးလျှင် ရွှေဒင်္ဂါး <code>{f(amount)}</code> ပြားစီ အခမဲ့ လက်ဆောင် ဖြန့်ဝေပေးလိုက်ပါပြီ။"), parse_mode='html')
-
-@bot1.on(events.NewMessage(pattern=r'^/resetstats$'))
-async def game_reset_stats_handler(event):
-    if not await check_admin(event.chat_id, event.sender_id): return
-    global chat_counters
-    chat_counters[event.chat_id] = 0
-    await event.reply(bq("⚙️ Active Group Message Counters အားလုံးကို Zero (0) သို့ ပြန်လည် ဆွဲချရှင်းလင်းလိုက်ပါပြီ။"), parse_mode='html')
-
 # ==========================================
 # 🧹 OWNER SYSTEM PURGE COMMAND (/cleanhai)
 # ==========================================
@@ -1413,614 +1219,6 @@ async def clean_all_harem_catches(event):
         await event.reply(text, parse_mode='html')
     except Exception as e:
         await event.reply(f"❌ <b>Cleanhai System Fault:</b> <code>{e}</code>", parse_mode='html')
-# ==========================================
-# 🃏 MULTIPLAYER CARD GAME SYSTEM
-# ==========================================
-@bot1.on(events.NewMessage(pattern=r'^/cardgame\s+(\d+)$'))
-async def create_cardgame_lobby(event):
-    if event.is_private: return
-    chat_id = event.chat_id
-    user_id = event.sender_id
-    bet_amount = int(event.pattern_match.group(1))
-    
-    if bet_amount <= 0:
-        return await event.reply("❌ လောင်းကြေးက အနည်းဆုံး 1 MMK ရှိရပါမယ်။")
-        
-    user_data = await users_catcher_col.find_one({"user_id": user_id})
-    if not user_data or user_data.get("wallet_balance", 0) < bet_amount:
-        return await event.reply("❌ လောင်းကြေးမလောက်ပါဘူး Bro!")
-        
-    if chat_id in active_card_games and active_card_games[chat_id]["status"] != "ended":
-        return await event.reply("⚠️ ဒီဂရုထဲမှာ လက်ရှိ Active ဖြစ်နေတဲ့ ကစားပွဲ ရှိနေပါသေးတယ်။")
-        
-    mention = await get_html_mention(event, user_id)
-    active_card_games[chat_id] = {
-        "host_id": user_id,
-        "bet": bet_amount,
-        "players": {user_id: mention},
-        "status": "lobby",
-        "msg_id": None
-    }
-    
-    lobby_text = (
-        f"🃏 <b>{f('CARD GAME LOBBY OPENED')}</b>\n"
-        f"⚡ ━━━━━━━━━━━━━━━━━━━━ ⚡\n"
-        f"👤 <b>Host:</b> {mention}\n"
-        f"💵 <b>Bet Stake:</b> <code>{bet_amount:,} MMK</code>\n\n"
-        f"<blockquote><b>ကစားလိုသူများအောက်က Button ကိုနှိပ်ပြီး join နိုင်ပါသည်။ Host မှ /startgame ဖြင့် စတင်နိုင်ပါသည်။</b></blockquote>"
-    )
-    buttons = [[Button.inline("🃏 ပါမယ့်သူဆိုနှိပ်လိုက်", data=f"cardjoin_{chat_id}")]]
-    msg = await event.reply(lobby_text, parse_mode='html', buttons=buttons)
-    active_card_games[chat_id]["msg_id"] = msg.id
-
-@bot1.on(events.NewMessage(pattern=r'^/startgame(?:@\w+)?$'))
-async def start_cardgame_handler(event):
-    if event.is_private: return
-    chat_id = event.chat_id
-    
-    if chat_id not in active_card_games:
-        return await event.reply("❌ <b>ဒီဂရုမှာ စတင်စရာ ကစားပွဲ Lobby မရှိသေးပါဘူး!</b>", parse_mode='html')
-        
-    game = active_card_games[chat_id]
-    if game["status"] != "lobby": return
-    if event.sender_id != game["host_id"]:
-        return await event.reply("❌ <b>ပွဲစဉ်ကို Host လုပ်သူသာလျှင် စတင်ခွင့် ရှိပါတယ်။</b>", parse_mode='html')
-        
-    if len(game["players"]) < 2:
-        return await event.reply("👥 <b>ကစားပွဲစတင်ရန် အနည်းဆုံး ကစားသမား ၂ ဦး လိုအပ်ပါတယ် Bro!</b>", parse_mode='html')
-        
-    game["status"] = "playing"
-    
-    valid_players = {}
-    for p_id, p_name in list(game["players"].items()):
-        p_doc = await users_catcher_col.find_one({"user_id": p_id})
-        if p_doc and p_doc.get("wallet_balance", 0) >= game["bet"]:
-            valid_players[p_id] = p_name
-            
-    if len(valid_players) < 2:
-        game["status"] = "ended"
-        del active_card_games[chat_id]
-        return await event.reply("❌ ကစားသမားများ ငွေမလုံလောက်တော့သဖြင့် ပွဲပျက်သွားပါပြီ။")
-        
-    game["players"] = valid_players
-    pool = game["bet"] * len(game["players"])
-    results = {}
-    max_score = -1
-    
-    for pid, name in game["players"].items():
-        card_score = random.randint(1, 10)
-        results[pid] = {"name": name, "score": card_score}
-        if card_score > max_score:
-            max_score = card_score
-            
-    winners = [pid for pid, data in results.items() if data["score"] == max_score]
-    split_prize = pool // len(winners)
-    
-    for pid in game["players"].keys():
-        if pid in winners:
-            await users_catcher_col.update_one({"user_id": pid}, {"$inc": {"wallet_balance": split_prize - game["bet"]}})
-        else:
-            await users_catcher_col.update_one({"user_id": pid}, {"$inc": {"wallet_balance": -game["bet"]}})
-            
-    res_text = f"🃏 <b>{f('CARD GAME RESULTS')}</b>\n"
-    res_text += f"💵 <b>Total Pool:</b> <code>{pool:,} MMK</code>\n"
-    res_text += f"⚡ ━━━━━━━━━━━━━━━━━━━━ ⚡\n\n"
-    for pid, data in results.items():
-        res_text += f"👤 {data['name']} — ရမှတ်: <code>[{data['score']}]</code>\n"
-        
-    res_text += f"\n🏆 <b>{f('WINNER(S)')}:</b>\n"
-    for w_id in winners:
-        res_text += f"✨ {results[w_id]['name']} (+<code>{split_prize:,} MMK</code>)\n"
-        
-    game["status"] = "ended"
-    del active_card_games[chat_id]
-    await event.reply(res_text, parse_mode='html')
-# ==========================================
-# 🎰 HI-LO CASINO GAME SYSTEM
-# ==========================================
-@bot1.on(events.NewMessage(pattern=r'^/hilo\s+(HIGH|LOW)\s+(\d+)$'))
-async def hilo_game_handler(event):
-    user_id = event.sender_id
-    choice = event.pattern_match.group(1).upper()
-    bet_amount = int(event.pattern_match.group(2))
-    
-    if bet_amount <= 0: return
-    
-    user_data = await users_catcher_col.find_one({"user_id": user_id})
-    if not user_data or user_data.get("wallet_balance", 0) < bet_amount:
-        return await event.reply("❌ <b>လောင်းကြေးမလောက်ပါဘူး Boss!</b>", parse_mode='html')
-        
-    cards = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
-    card_display = {2:"2", 3:"3", 4:"4", 5:"5", 6:"6", 7:"7", 8:"8", 9:"9", 10:"10", 11:"J", 12:"Q", 13:"K", 14:"A"}
-    
-    base_card = random.choice(cards)
-    new_card = random.choice(cards)
-    while new_card == base_card:
-        new_card = random.choice(cards)
-        
-    base_display = card_display[base_card]
-    new_display = card_display[new_card]
-    
-    is_win = False
-    if choice == "HIGH" and new_card > base_card:
-        is_win = True
-    elif choice == "LOW" and new_card < base_card:
-        is_win = True
-        
-    mention = await get_html_mention(event, user_id)
-    if is_win:
-        await users_catcher_col.update_one({"user_id": user_id}, {"$inc": {"wallet_balance": bet_amount}})
-        status_text = f"🎉 <b>{f('CHALLENGE WON')}!!! (+{bet_amount:,} MMK)</b>"
-    else:
-        await users_catcher_col.update_one({"user_id": user_id}, {"$inc": {"wallet_balance": -bet_amount}})
-        status_text = f"💸 <b>{f('CHALLENGE LOST')}... (-{bet_amount:,} MMK)</b>"
-        
-    result_text = (
-        f"🃏 <b>{f('HI-LO CASINO MATRIX RESULTS')}</b>\n"
-        f"👤 <b>Player:</b> {mention}\n"
-        f"💵 <b>Bet Stake:</b> <code>{bet_amount:,} MMK</code>\n\n"
-        f"🎴 ယခင်ပြထားတဲ့ကတ်: <b>[ {base_display} ]</b>\n"
-        f"🎲 နောက်ထွက်လာတဲ့ကတ်: ✨ <b>[ {new_display} ]</b> ✨\n"
-        f"🎯 မင်းရွေးချယ်ခဲ့တာ: <code>{choice}</code>\n\n"
-        f"{status_text}"
-    )
-    await event.reply(result_text, parse_mode='html')
-# ==========================================
-# 🎰 SLOTS MACHINE GAME SYSTEM
-# ==========================================
-@bot1.on(events.NewMessage(pattern=r'^/slots\s+(\d+)$'))
-async def slots_game_handler(event):
-    user_id = event.sender_id
-    bet = int(event.pattern_match.group(1))
-    
-    if bet <= 0: return
-    user_data = await users_catcher_col.find_one({"user_id": user_id})
-    if not user_data or user_data.get("wallet_balance", 0) < bet:
-        return await event.reply("❌ <b>လောင်းကြေးမလောက်ပါဘူး Boss!</b>", parse_mode='html')
-        
-    mention = await get_html_mention(event, user_id)
-    symbols = ["🍒", "🍋", "🍊", "🍇", "🔔", "⭐", "💎", "🐃", "🦀", "🐄", "🦅"]
-    
-    anim_msg = await event.reply(f"🎰 {mention} <b>{f('SPINNING MATRIX SLOTS')}... 🌀</b>", parse_mode='html')
-    await asyncio.sleep(0.6)
-    
-    mid_syms = random.choices(symbols, k=7)
-    mid_str = " | ".join(mid_syms)
-    await bot1.edit_message(
-        event.chat_id, anim_msg.id,
-        f"🎰 {mention} <b>{f('REELS ARE LOCKING IN')}... 🔥</b>\n\n"
-        f"<b>[ {mid_str} ]</b>\n\n"
-        f"<i>Decelerating Matrix Engine... ⚡</i>",
-        parse_mode='html'
-    )
-    await asyncio.sleep(0.9)
-    
-    res_syms = random.choices(symbols, k=7)
-    res_str = " | ".join(res_syms)
-    
-    from collections import Counter
-    counts = Counter(res_syms)
-    most_common_sym, max_count = counts.most_common(1)[0]
-    
-    win_amount = 0
-    if max_count == 7:
-        win_amount = bet * 77 if most_common_sym == "🐃" else bet * 50
-        status_text = f"🥶 <b>{f('GOD-TIER JACKPOT')}!!! (+{win_amount:,} MMK)</b>"
-    elif max_count == 6:
-        win_amount = bet * 25
-        status_text = f"💎 <b>{f('MEGA MULTI-MATCH')}!!! (+{win_amount:,} MMK)</b>"
-    elif max_count == 5:
-        win_amount = bet * 12
-        status_text = f"⚡ <b>{f('SUPER MULTI-MATCH')}!! (+{win_amount:,} MMK)</b>"
-    elif max_count == 4:
-        win_amount = bet * 5
-        status_text = f"😲 <b>{f('MULTI-MATCH SUCCESS')}! (+{win_amount:,} MMK)</b>"
-    else:
-        win_amount = 0
-        status_text = f"💸 <b>{f('SLOT ENGINE FAILURE / ရှုံးနိမ့်သွားပါပြီ')} ... (-{bet:,} MMK)</b>"
-        
-    if win_amount > 0:
-        await users_catcher_col.update_one({"user_id": user_id}, {"$inc": {"wallet_balance": win_amount - bet}})
-    else:
-        await users_catcher_col.update_one({"user_id": user_id}, {"$inc": {"wallet_balance": -bet}})
-        
-    final_text = (
-        f"🎰 <b>{f('SLOT MACHINE REALITY RESULT')}</b>\n"
-        f"👤 <b>Player:</b> {mention}\n"
-        f"💵 <b>Base Stake:</b> <code>{bet:,} MMK</code>\n\n"
-        f"🎰 <b>[ {res_str} ]</b> 🎰\n\n"
-        f"✨ <b>Matching Metrics:</b> <code>{max_count}x '{most_common_sym}'</code>\n"
-        f"<blockquote>{status_text}</blockquote>"
-    )
-    await bot1.edit_message(event.chat_id, anim_msg.id, final_text, parse_mode='html')
-# ==========================================
-# 🪙 COIN FLIP GAME SYSTEM
-# ==========================================
-@bot1.on(events.NewMessage(pattern=r'^/coin\s+(head|tail|ခေါင်း|ပန်း)\s+(\d+)$'))
-async def coin_flip_handler(event):
-    user_id = event.sender_id
-    choice_input = event.pattern_match.group(1).lower()
-    bet_amount = int(event.pattern_match.group(2))
-    
-    if bet_amount <= 0: return
-    user_data = await users_catcher_col.find_one({"user_id": user_id})
-    if not user_data or user_data.get("wallet_balance", 0) < bet_amount:
-        return await event.reply("❌ <b>လောင်းကြေးမလောက်ပါဘူး Boss!</b>", parse_mode='html')
-        
-    mention = await get_html_mention(event, user_id)
-    animation_msg = await event.reply(f"🪙 {mention} <b>{f('FLIPPING COIN IN THE AIR')}... 🌀</b>", parse_mode='html')
-    await asyncio.sleep(1.5)
-    
-    result = random.choice(["head", "tail"])
-    is_win = False
-    if choice_input in ["head", "ခေါင်း"] and result == "head": is_win = True
-    elif choice_input in ["tail", "ပန်း"] and result == "tail": is_win = True
-    
-    display_result = "ခေါင်း (HEAD)" if result == "head" else "ပန်း (TAIL)"
-    
-    if is_win:
-        await users_catcher_col.update_one({"user_id": user_id}, {"$inc": {"wallet_balance": bet_amount}})
-        await bot1.edit_message(event.chat_id, animation_msg.id, f"🪙 {mention} <b>{f('COIN FLIP SUCCESS')}!!</b>\n✨ ရလဒ်က [ <b>{display_result}</b> ] ဖြစ်ပါတယ်!\n🎉 Boss မှန်သွားလို့ ပွဲနိုင်ပါတယ်။ <code>+{bet_amount:,} MMK</code>", parse_mode='html')
-    else:
-        await users_catcher_col.update_one({"user_id": user_id}, {"$inc": {"wallet_balance": -bet_amount}})
-        await bot1.edit_message(event.chat_id, animation_msg.id, f"🪙 {mention} <b>{f('COIN FLIP FAILED')}..</b>\n💨 ရလဒ်က [ <b>{display_result}</b> ] ဖြစ်ပါတယ်!\n💸 မှားသွားတဲ့အတွက် လောင်းကြေးရှုံးသွားပါပြီ။ <code>-{bet_amount:,} MMK</code>", parse_mode='html')
-# ==========================================
-# 🎲 INTERACTIVE DICE GAME SYSTEM
-# ==========================================
-@bot1.on(events.NewMessage(pattern=r'^/dice\s+(\d+)$'))
-async def dice_game_handler(event):
-    user_id = event.sender_id
-    bet_amount = int(event.pattern_match.group(1))
-    chat_id = event.chat_id
-    
-    if bet_amount <= 0: return
-    user_data = await users_catcher_col.find_one({"user_id": user_id})
-    if not user_data or user_data.get("wallet_balance", 0) < bet_amount:
-        return await event.reply("❌ <b>လောင်းကြေးမလောက်ပါဘူး Boss!</b>", parse_mode='html')
-        
-    mention = await get_html_mention(event, user_id)
-    dice_msg = await bot1.send_message(chat_id, file=types.InputMediaDice(emoticon="🎲"))
-    await asyncio.sleep(3.5)
-    
-    dice_value = dice_msg.media.value
-    if dice_value >= 4:
-        await users_catcher_col.update_one({"user_id": user_id}, {"$inc": {"wallet_balance": bet_amount}})
-        await event.reply(f"🎉 {mention} <b>{f('DICE MATCH WIN')}!!!</b>\n🎲 ရလဒ်အမှတ်: <code>{dice_value}</code> (၄ နှင့်အထက်)\n🪙 စနစ်မှ <code>+{bet_amount:,} MMK</code> ထည့်သွင်းပေးလိုက်ပါပြီ။", parse_mode='html')
-    else:
-        await users_catcher_col.update_one({"user_id": user_id}, {"$inc": {"wallet_balance": -bet_amount}})
-        await event.reply(f"💸 {mention} <b>{f('DICE MATCH LOSS')}...</b>\n🎲 ရလဒ်အမှတ်: <code>{dice_value}</code> (၃ နှင့်အောက်)\n📉 သင့်အကောင့်ထဲမှ <code>-{bet_amount:,} MMK</code> နှုတ်ယူလိုက်ပါပြီ။", parse_mode='html')
-# ==========================================
-# 🌲 TEXT ADVENTURE HUNT GAME SYSTEM
-# ==========================================
-@bot1.on(events.NewMessage(pattern=r'^/hunt(?:@\w+)?$'))
-async def text_adventure_hunt_handler(event):
-    user_id = event.sender_id
-    mention = await get_html_mention(event, user_id)
-    user_doc = await users_catcher_col.find_one({"user_id": user_id})
-    
-    current_time = time.time()
-    last_hunt = user_doc.get("hunt_cooldown", 0) if user_doc else 0
-    if current_time - last_hunt < 180:
-        return await event.reply(f"⏳ {mention} <b>{f('အမဲလိုက်ထွက်ခြင်း နားပါဦး Bro!')} Cooldown စက္ကန့် {int(180 - (current_time - last_hunt))}s လိုပါသေးသည်။</b>", parse_mode='html')
-        
-    earned = random.randint(200, 80000)
-    hunt_stories = [
-        f"🌲 {mention} သည် မှော်တောနက်ကြီးထဲသို့ သတ္တိရှိရှိ ဝင်ရောက်ပြီး သားရဲနဂါးတစ်ကောင်ကို သတ်ဖြတ်ကာ ရတနာသေတ္တာအိုကြီးကို တွေ့ရှိခဲ့သည်။ 💎",
-        f"🧙‍♀️ {mention} သည် တောစပ်တွင် လမ်းပျောက်နေသော စုန်းမအိုကြီးကို ကူညီခဲ့သဖြင့် စုန်းမကြီးမှ ကျေးဇူးတုံ့ပြန်သောအားဖြင့် ရွှေဒင်္ဂါးအိတ် ပေးအပ်ခဲ့သည်။ ✨",
-        f"🏚 {mention} သည် ပျက်စီးနေသော ရှေးဟောင်းဂူဗိမာန်အတွင်း စွန့်စားရှာဖွေရင်း ဖုံးကွယ်ထားသော လျှို့ဝှက်မြေအောက်ခန်းတစ်ခုကို ဖော်ထုတ်နိုင်ခဲ့သည်။ 🪙",
-        f"⚔️ {mention} သည် တောပုန်းဓားပြဂိုဏ်းတစ်ခုနှင့် ထိပ်တိုက်တိုးပြီး ဓားပြဗိုလ်ကို အောင်မြင်စွာ နှိမ်နင်းကာ ၎င်းတို့ခိုးယူထားသော ရိက္ခာဘဏ္ဍာများကို သိမ်းပိုက်နိုင်ခဲ့သည်။ 🔥"
-    ]
-    
-    story = random.choice(hunt_stories)
-    await users_catcher_col.update_one(
-        {"user_id": user_id},
-        {"$set": {"hunt_cooldown": current_time}, "$inc": {"wallet_balance": earned}}
-    )
-    
-    hunt_text = (
-        f"🏹 <b>{f('HUNTING EXCURSION REPORT')}</b>\n"
-        f"⚡ ━━━━━━━━━━━━━━━━━━━━ ⚡\n"
-        f"<blockquote>{story}</blockquote>\n"
-        f"💰 <b>Bounty Recovered:</b> <code>+{earned:,} MMK</code>\n"
-        f"⏱️ <b>Next Hunt Cooldown:</b> <code>3 Minutes (180s)</code>"
-    )
-    await event.reply(hunt_text, parse_mode='html')
-# ==========================================
-# 🛒 PREMIUM AUCTION MARKETPLACE ENGINE
-# ==========================================
-@bot1.on(events.NewMessage(pattern=r'^/sell\s+([a-zA-Z0-9_]+)\s+(\d+)$'))
-async def sell_market_handler(event):
-    user_id = event.sender_id
-    char_id = event.pattern_match.group(1).upper()
-    price = int(event.pattern_match.group(2))
-    
-    if price <= 0:
-        return await event.reply(f"❌ <b>{f('ဈေးနှုန်းက အနည်းဆုံး 1 MMK တော့ ရှိရမယ်လေ Bro!')}</b>", parse_mode='html')
-        
-    user_doc = await users_catcher_col.find_one({"user_id": user_id})
-    user_harem = user_doc.get("harem", []) if user_doc else []
-    
-    char_item = next((x for x in user_harem if isinstance(x, dict) and x.get("char_id") == char_id and x.get("status") != "market"), None)
-    if not char_item:
-        return await event.reply(f"❌ <b>{f('ဒီကတ်က သင့် Vault ထဲမှာ အလွတ်မရှိပါဘူး သို့မဟုတ် စျေးကွက်တင်ထားပြီးသားဖြစ်နေပါတယ် Bro!')}</b>", parse_mode='html')
-        
-    char_data = await characters_base_col.find_one({"char_id": char_id})
-    if not char_data: return
-    
-    listing_id = f"LST{random.randint(10000, 99999)}"
-    char_item["status"] = "market"
-    char_item["listing_id"] = listing_id
-    
-    await users_catcher_col.update_one({"user_id": user_id}, {"$set": {"harem": user_harem}})
-    sender_name = user_doc.get("fullname", f"Agent {user_id}")
-    
-    await marketplace_col.insert_one({
-        "listing_id": listing_id,
-        "seller_id": user_id,
-        "seller_name": sender_name,
-        "char_id": char_id,
-        "char_name": char_data["name"],
-        "char_rarity": char_data.get("rarity", "🪵 COMMON"),
-        "price": price,
-        "listed_date": time.time()
-    })
-    
-    await event.reply(
-        f"🛒 <b>{f('MARKETPLACE LISTING SECURED')}</b>\n"
-        f"⚡ ━━━━━━━━━━━━━━━━━━━━ ⚡\n"
-        f"🆔 <b>Listing ID:</b> <code>{listing_id}</code>\n"
-        f"🃏 <b>Character:</b> <code>{char_data['name']}</code> [{char_id}]\n"
-        f"💰 <b>Asking Price:</b> <code>{price:,} MMK</code>\n\n"
-        f"<blockquote>မိမိတင်ထားသောကတ်အား ပြန်လည်ရုပ်သိမ်းလိုပါက <code>/buy {char_id}</code> ဖြင့် ပြန်လည်ရုပ်သိမ်းနိုင်ပါသည်။</blockquote>",
-        parse_mode='html'
-    )
-
-@bot1.on(events.NewMessage(pattern=r'^/buy\s+([a-zA-Z0-9_]+)$'))
-async def buy_market_handler(event):
-    user_id = event.sender_id
-    char_id = event.pattern_match.group(1).upper()
-    
-    my_listing = await marketplace_col.find_one({"char_id": char_id, "seller_id": user_id})
-    if my_listing:
-        user_doc = await users_catcher_col.find_one({"user_id": user_id})
-        user_harem = user_doc.get("harem", []) if user_doc else []
-        for x in user_harem:
-            if isinstance(x, dict) and x.get("listing_id") == my_listing["listing_id"]:
-                x["status"] = "vault"
-                del x["listing_id"]
-                break
-        await users_catcher_col.update_one({"user_id": user_id}, {"$set": {"harem": user_harem}})
-        await marketplace_col.delete_one({"listing_id": my_listing["listing_id"]})
-        return await event.reply(f"🎉 <b>{f('Direct Purchase Success')}</b>\nမိမိတင်ထားသော အရောင်းစာရင်းကို အောင်မြင်စွာ ဖျက်သိမ်းပြီး Vault ထဲပြန်ထည့်ပေးလိုက်ပါပြီ။", parse_mode='html')
-        
-    listings = await marketplace_col.find({"char_id": char_id}).sort("price", 1).to_list(length=10)
-    if not listings:
-        return await event.reply(f"❌ <b>{f('ဒီကတ်အတွက် လက်ရှိရောင်းချသူ မရှိသေးပါဘူး Bro!')}</b>", parse_mode='html')
-        
-    market_text = f"🛒 <b>{f('MARKETPLACE LISTINGS FOR')} : {char_id}</b>\n⚡ ━━━━ ⚡\n\n"
-    buttons = []
-    for item in listings:
-        market_text += f"👤 <b>Merchant:</b> {item['seller_name']} [<code>{item['seller_id']}</code>]\n💰 <b>Price Value:</b> <code>{item['price']:,} MMK</code>\n\n"
-        buttons.append([Button.inline(f"Buy via {item['price']:,} MMK", data=f"mktbuy_{item['listing_id']}")])
-        
-    await event.reply(market_text, parse_mode='html', buttons=buttons)
-
-@bot1.on(events.NewMessage(pattern=r'^/market$'))
-async def view_global_market(event):
-    all_listings = await marketplace_col.find().sort("listed_date", -1).limit(20).to_list(length=20)
-    if not all_listings:
-        return await event.reply(f"🏪 <b>{f('规则 စျေးကွက်ထဲတွင် မည်သည့်ကတ်မှ ရောင်းရန်မရှိသေးပါ Bro!')}</b>", parse_mode='html')
-        
-    msg = f"🏪 <b>{f('BOD GLOBAL LEADERBOARD AUCTION MARKET')}</b>\n⚡ ━━━━━━━━━━━━━━━━━━━━ ⚡\n\n"
-    for item in all_listings:
-        msg += f"📦 <b>[{item['char_id']}] {item['char_name']}</b>\n💰 Price: <code>{item['price']:,} MMK</code> | 👤 Seller: {item['seller_name']}\n⚙️ ဝယ်ရန်: <code>/buy {item['char_id']}</code>\n⚡ ━━━━━ ⚡\n"
-    await event.reply(msg, parse_mode='html')
-# ==========================================
-# 🤝 14. PEER TRADE MATRIX (/trade)
-# ==========================================
-@bot1.on(events.NewMessage(pattern=r'^/trade\s+([a-zA-Z0-9_]+)\s+([a-zA-Z0-9_]+)$'))
-async def trade_proposal_handler(event):
-    if not event.is_reply:
-        return await event.reply(f"❌ <b>{f('Trade လုပ်မယ့်သူရဲ့ စာကို Reply ပြန်ပြီး ခေါ်ယူပေးပါ Bro!')}</b>", parse_mode='html')
-        
-    my_char_id = event.pattern_match.group(1).upper()
-    their_char_id = event.pattern_match.group(2).upper()
-    
-    sender_id = event.sender_id
-    reply_msg = await event.get_reply_message()
-    target_id = reply_msg.sender_id
-    
-    if sender_id == target_id:
-        return await event.reply("❌ မိမိကိုယ်တိုင်နဲ့ ကတ်လဲလို့မရပါဘူး Bro!")
-        
-    s_doc = await users_catcher_col.find_one({"user_id": sender_id})
-    s_harem = s_doc.get("harem", []) if s_doc else []
-    s_item = next((x for x in s_harem if isinstance(x, dict) and x.get("char_id") == my_char_id and x.get("status") != "market"), None)
-    
-    if not s_item:
-        return await event.reply(f"❌ သင့် Vault ထဲတွင် ကတ် ID [<code>{my_char_id}</code>] မရှိပါ သို့မဟုတ် စျေးကွက်တင်ထားပါသည်။")
-        
-    t_doc = await users_catcher_col.find_one({"user_id": target_id})
-    t_harem = t_doc.get("harem", []) if t_doc else []
-    t_item = next((x for x in t_harem if isinstance(x, dict) and x.get("char_id") == their_char_id and x.get("status") != "market"), None)
-    
-    if not t_item:
-        return await event.reply(f"❌ တစ်ဖက်လူ၏ Vault ထဲတွင် ကတ် ID [<code>{their_char_id}</code>] မရှိပါ သို့မဟုတ် စျေးကွက်တင်ထားပါသည်။")
-        
-    s_mention = await get_html_mention(event, sender_id)
-    t_mention = await get_html_mention(event, target_id)
-    
-    trade_text = (
-        f"🤝 <b>{f('PROPOSED TRADE CONTRACT')}</b>\n"
-        f"⚡ ━━━━━━━━━━━━━━━━━━━━ ⚡\n"
-        f"👤 {s_mention} မှ {t_mention} ထံသို့ ကတ်ချင်းလဲလှယ်ရန် ကမ်းလှမ်းချက်။\n\n"
-        f"📤 <b>{f('Your Asset')}:</b> <code>{my_char_id}</code>\n"
-        f"📥 <b>{f('Their Asset')}:</b> <code>{their_char_id}</code>\n\n"
-        f"<blockquote><b>ကမ်းလှမ်းမှုကို လက်ခံရန် တဖက်လူမှ အောက်က Button ကိုနှိပ်ပါ။</b></blockquote>"
-    )
-    buttons = [[Button.inline("🤝 ကမ်းလှမ်းချက်ကို လက်ခံသည်", data=f"tradeaccept_{sender_id}_{target_id}_{my_char_id}_{their_char_id}")]]
-    await event.reply(trade_text, parse_mode='html', buttons=buttons)
-# ==========================================
-# ♻️ MELT ENGINE CORE (/scrap)
-# ==========================================
-@bot1.on(events.NewMessage(pattern=r'^/scrap\s+([a-zA-Z0-9_]+)$'))
-async def scrap_card_handler(event):
-    user_id = event.sender_id
-    char_id = event.pattern_match.group(1).upper()
-    mention = await get_html_mention(event, user_id)
-    
-    user_doc = await users_catcher_col.find_one({"user_id": user_id})
-    user_harem = user_doc.get("harem", []) if user_doc else []
-    char_item = next((x for x in user_harem if isinstance(x, dict) and x.get("char_id") == char_id and x.get("status") != "market"), None)
-    
-    if not char_item:
-        return await event.reply(f"❌ <b>{f('ဒီကတ်က သင့် Vault ထဲမှာ မရှိပါဘူး Bro!')}</b>", parse_mode='html')
-        
-    char_base = await characters_base_col.find_one({"char_id": char_id})
-    if not char_base: return
-    
-    refund_val = char_base.get("currency_value", 100) // 2
-    user_harem.remove(char_item)
-    
-    await users_catcher_col.update_one(
-        {"user_id": user_id},
-        {"$set": {"harem": user_harem}, "$inc": {"wallet_balance": refund_val}}
-    )
-    
-    scrap_msg = (
-        f"♻️ <b>{f('ASSET INCINERATION / MELT ENGINE COMPLETED')}</b>\n"
-        f"⚡ ━━━━━━━━━━━━━━━━━━━━ ⚡\n"
-        f"🃏 <b>Scrapped Card:</b> <code>{char_base['name']}</code> [<code>{char_id}</code>]\n"
-        f"🌟 <b>Rarity Grade:</b> {char_base['rarity']}\n"
-        f"🪙 <b>Melt Scrap Refund (50%):</b> <code>+{refund_val:,} MMK</code>\n"
-        f"<blockquote><b>အိုင်တမ်အား အောင်မြင်စွာ ဖျက်ဆီးပြီး ငွေပြန်အမ်းပေးလိုက်ပါပြီ Boss!</b></blockquote>"
-    )
-    await event.reply(scrap_msg, parse_mode='html')
-
-# ==========================================
-# 🏆 CASINO RICHEST MATRIX (/richest)
-# ==========================================
-@bot1.on(events.NewMessage(pattern=r'^/richest$'))
-async def richest_leaderboard_handler(event):
-    cursor = users_catcher_col.find({"wallet_balance": {"$gt": 0}}).sort("wallet_balance", -1).limit(10)
-    richest_users = await cursor.to_list(length=10)
-    
-    if not richest_users:
-        return await event.reply(f"🏆 <b>{f('Leaderboard matrix data clear ဖြစ်နေပါတယ် Bro!')}</b>", parse_mode='html')
-        
-    msg = f"💰 <b>{f('BODကာစီနိုနဲ့Cardဖမ်းလောကရဲ့ - TOP 10 RICHEST players')}</b>\n⚡ ━━━━━⚡\n"
-    for i, u in enumerate(richest_users):
-        bal = u.get("wallet_balance", 0)
-        user_display = u.get('fullname') or f"User {u['user_id']}"
-        msg += f"<b>{i+1}.</b> {user_display} — <code>{bal:,} MMK</code> 🪙\n"
-    msg += f"\nFamily Cluster: <b>Brotherhood of Dexter</b>"
-    await event.reply(msg, parse_mode='html')
-# ==========================================
-# 🔘 UNIFIED CALLBACK QUERY MATRIX PROCESSOR EXTENSIONS
-# ==========================================
-@bot1.on(events.CallbackQuery) #function အောက်က if/elif အစုစုထဲမှာ ဒါလေးတွေ ထည့်ပေးပါ-
-async def unified_callback_matrix_processor(event):
-    if not event.data:
-        return
-        
-    # ⚡ Callback Data ကို String ပြောင်းပြီး '_' နဲ့ ခွဲထုတ်ပေးတဲ့ နှလုံးသားအပိုင်း
-    try:
-        data_str = event.data.decode('utf-8')
-        data_parts = data_str.split('_')
-        action_type = data_parts[0]
-    except Exception:
-        return
-
-    # 🛑 ပထမဆုံး စဖွင့်မယ့် 'if' အခြေအနေ (ဒါက ဘရိုရဲ့ နဂိုမူလ code တစ်ခုခု ဖြစ်ရပါမယ်)
-    if action_type == "test":
-        await event.answer("System Testing Status: OK ✔️", alert=True)
-
-    elif action_type == "mktbuy":
-        listing_id = data_parts[1]
-        buyer_id = event.sender_id
-        listing = await marketplace_col.find_one({"listing_id": listing_id})
-        if not listing: return await event.answer("❌ ဒီအရောင်းစာရင်းက မရှိတော့ပါဘူး သို့မဟုတ် ရောင်းထွက်သွားပါပြီ။", alert=True)
-        price = listing["price"]
-        seller_id = listing["seller_id"]
-        char_id = listing["char_id"]
-        if buyer_id == seller_id: return await event.answer("⚠️ မိမိပစ္စည်းကို မိမိပြန်ဝယ်လို့ မရပါဘူး Bro!", alert=True)
-        
-        buyer_doc = await users_catcher_col.find_one({"user_id": buyer_id})
-        if not buyer_doc or buyer_doc.get("wallet_balance", 0) < price:
-            return await event.answer("❌ သင့်ထံတွင် ဝယ်ယူရန် ငွေအလုံအလောက်မရှိပါ Bro!", alert=True)
-            
-        await users_catcher_col.update_one({"user_id": buyer_id}, {"$inc": {"wallet_balance": -price}})
-        await users_catcher_col.update_one({"user_id": seller_id}, {"$inc": {"wallet_balance": price}})
-        
-        s_doc = await users_catcher_col.find_one({"user_id": seller_id})
-        s_harem = s_doc.get("harem", [])
-        s_item = next((x for x in s_harem if isinstance(x, dict) and x.get("listing_id") == listing_id), None)
-        if s_item: s_harem.remove(s_item)
-        await users_catcher_col.update_one({"user_id": seller_id}, {"$set": {"harem": s_harem}})
-        
-        b_mention = await get_html_mention(event, buyer_id)
-        await users_catcher_col.update_one(
-            {"user_id": buyer_id},
-            {"$push": {"harem": {"char_id": char_id, "caught_date": time.time(), "rarity": listing.get("char_rarity", "✨ RARE"), "status": "vault"}}, "$set": {"fullname": b_mention}},
-            upsert=True
-        )
-        await marketplace_col.delete_one({"listing_id": listing_id})
-        await event.edit(f"🛍 <b>{f('MARKETPLACE TRANSACTION SUCCESS')}</b>\n{b_mention} မှ ကတ် ID [<code>{char_id}</code>] ကို <code>{price:,} MMK</code> ဖြင့် အောင်မြင်စွာ ဝယ်ယူလိုက်ပါပြီ။ 🔥")
-
-    elif action_type == "cardjoin":
-        g_chat_id = int(data_parts[1])
-        p_id = event.sender_id
-        if g_chat_id not in active_card_games: return await event.answer("❌ ကစားပွဲ သက်တမ်းကုန်သွားပါပြီ။", alert=True)
-        game = active_card_games[g_chat_id]
-        if game["status"] != "lobby": return await event.answer("❌ ကစားပွဲစတင်သွားပြီဖြစ်၍ join လို့မရတော့ပါ။", alert=True)
-        if p_id in game["players"]: return await event.answer("⚠️ သင် join ပြီးသားဖြစ်နေပါတယ် Bro!", alert=True)
-        
-        p_doc = await users_catcher_col.find_one({"user_id": p_id})
-        if not p_doc or p_doc.get("wallet_balance", 0) < game["bet"]:
-            return await event.answer("❌ သင့်မှာ လောင်းကြေးအလုံအလောက်မရှိလို့ Join လို့မရပါ Bro!", alert=True)
-            
-        p_mention = await get_html_mention(event, p_id)
-        game["players"][p_id] = p_mention
-        
-        lobby_text = (
-            f"🃏 <b>{f('CARD GAME LOBBY OPENED')}</b>\n"
-            f"⚡ ━━━━━━━━━━━━━━━━━━━━ ⚡\n"
-            f"👤 <b>Host:</b> {game['players'][game['host_id']]}\n"
-            f"💵 <b>Bet Stake:</b> <code>{game['bet']:,} MMK</code>\n\n"
-            f"👥 <b>Joined Players ({len(game['players'])}):</b>\n"
-        )
-        for pl_name in game["players"].values():
-            lobby_text += f"• {pl_name}\n"
-        lobby_text += f"\n<blockquote><b>ကစားလိုသူများအောက်က Button ကိုနှိပ်ပြီး join နိုင်ပါသည်။ Host မှ /startgame ဖြင့် စတင်နိုင်ပါသည်။</b></blockquote>"
-        buttons = [[Button.inline("🃏 ပါမယ့်သူဆိုနှိပ်လိုက်", data=f"cardjoin_{g_chat_id}")]]
-        await event.edit(lobby_text, parse_mode='html', buttons=buttons)
-        await event.answer("🎉 ကစားပွဲထဲသို့ Join ခြင်းအောင်မြင်ပါသည်။")
-
-    elif action_type == "tradeaccept":
-        sender_id = int(data_parts[1])
-        target_id = int(data_parts[2])
-        my_char_id = data_parts[3]
-        their_char_id = data_parts[4]
-        if event.sender_id != target_id: return await event.answer("⚠️ ၎င်းကမ်းလှမ်းချက်သည် သင့်အတွက်မဟုတ်ပါ!", alert=True)
-        
-        s_doc = await users_catcher_col.find_one({"user_id": sender_id})
-        t_doc = await users_catcher_col.find_one({"user_id": target_id})
-        s_harem = s_doc.get("harem", []) if s_doc else []
-        t_harem = t_doc.get("harem", []) if t_doc else []
-        
-        s_item = next((x for x in s_harem if isinstance(x, dict) and x.get("char_id") == my_char_id and x.get("status") != "market"), None)
-        t_item = next((x for x in t_harem if isinstance(x, dict) and x.get("char_id") == their_char_id and x.get("status") != "market"), None)
-        
-        if not s_item or not t_item: return await event.edit(f"❌ <b>{f('CONTRACT FAILED / ပိုင်ဆိုင်မှု အခြေအနေ ပြောင်းလဲသွားလို့ မအောင်မြင်တော့ပါ!')}</b>", parse_mode='html')
-        
-        s_harem.remove(s_item)
-        t_harem.remove(t_item)
-        s_harem.append({"char_id": their_char_id, "caught_date": time.time(), "rarity": t_item.get("rarity", "Unknown"), "status": "vault"})
-        t_harem.append({"char_id": my_char_id, "caught_date": time.time(), "rarity": s_item.get("rarity", "Unknown"), "status": "vault"})
-        
-        await users_catcher_col.update_one({"user_id": sender_id}, {"$set": {"harem": s_harem}})
-        await users_catcher_col.update_one({"user_id": target_id}, {"$set": {"harem": t_harem}})
-        await event.edit(f"🤝 <b>{f('TRADE CONCLUDED / ကတ်လဲလှယ်ခြင်း လုပ်ငန်းစဉ် အောင်မြင်စွာ ပြီးဆုံးပါပြီ။ 🔥')}</b>", parse_mode='html')
 
 # ====================================================================================
 # 💀 BULlY & SHADOW BAN SYSTEM
@@ -2156,28 +1354,6 @@ async def global_traffic_processing_matrix(event):
                 return await event.respond(bq(warn_msg), parse_mode='html')
             except Exception: pass
 
-    # AUTOMATED ANIME CARD DROP LOGIC (MAIN 60 INTEGRATION REVOLUTION)
-    global chat_counters
-    if not event.text.startswith(('/', '.', 'မှတ်', '@')):
-        chat_counters[chat_id] = chat_counters.get(chat_id, 0) + 1
-        
-        config_doc = await system_col.find_one({"chat_id": chat_id, "type": "spawn_config"})
-        target_trigger_count = config_doc["interval"] if config_doc else DEFAULT_SPAWN_INTERVAL
-        
-        if chat_counters[chat_id] >= target_trigger_count:
-            chat_counters[chat_id] = 0
-            # Automated Spawn Dispatcher
-            count_chars = await characters_col.count_documents({})
-            if count_chars > 0:
-                random_cursor = characters_col.aggregate([{"$sample": {"size": 1}}])
-                docs = await random_cursor.to_list(length=1)
-                target_char = docs[0]
-                await group_spawn_state_col.update_one(
-                    {"chat_id": chat_id}, {"$set": {"active_character": target_char["name"]}}, upsert=True
-                )
-                spawn_txt = f"🔮 <b>🌌 𝘼𝙉𝙄𝙈𝙀 𝘾𝘼𝙍𝘿 𝙎𝙋𝘼𝙒𝙉𝙀𝘿 🌌</b>\n🛸 ───────────────────\n💎 <b>Rarity Status:</b> <code>{target_char['rarity']}</code>\n👉 <code>/catch {target_char['name']}</code>"
-                try: await bot1.send_message(chat_id, bq(spawn_txt), file=target_char["media"], parse_mode='html')
-                except Exception: pass
 
 # ====================================================================================
 # 👈 REPLY SAVE AUTO RESPONDER SYSTEM (NON-BLOCKING ASYNC POOL)
