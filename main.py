@@ -82,8 +82,6 @@ morgan_col = db["morgan_talk"]
 rank_col = db["rank_col"]
 system_col = db["system_col"]
 reply_save_col = db["reply_save_col"]
-premium_talk_col = db["premium_talk_pool"]  # 👑 Premium Emoji မက်ဆေ့ခ်ျတွေ စုဆောင်းမည့် DB
-premode_col = db["premode_status"]          # ⚙️ On/Off Setting သိမ်းမည့် DB
 
 # ==========================================
 # 🤖 CLIENT SETUP (SINGLE BOT)
@@ -471,66 +469,8 @@ async def add_filter(event):
             await event.reply(bq(f"❌ Storage ထဲ လှမ်းသိမ်းရမှာ Error တက်သွားတယ်: {e}"), parse_mode='html')
     else:
         await event.reply(bq("⚠️ Filter မှတ်ဖို့အတွက် ပို့ချင်တဲ့စာ သို့မဟုတ် မီဒီယာကို Reply ပြန်ပြီးမှ သုံးပေးပါ ဘရို။"), parse_mode='html')
-
-@bot1.on(events.NewMessage(pattern=r'^[/.]premode\s+(\d+|off)'))
-async def set_global_premode(event):
-    global GLOBAL_PREMODE_THRESHOLD
-    # Owner သို့မဟုတ် Group Admin ဖြစ်မှ သုံးခွင့်ပေးမယ်
-    if event.sender_id != OWNER_ID:
-        if not await check_admin(event.chat_id, event.sender_id): return
-        
-    input_val = event.pattern_match.group(1).lower().strip()
-    
-    if input_val == "off":
-        GLOBAL_PREMODE_THRESHOLD = 0
-        await premode_col.update_one({"_id": "global_config"}, {"$set": {"threshold": 0}}, upsert=True)
-        await event.reply(bq("👑 Global Premium Mode ကို လုံးဝ ပိတ် (OFF) လိုက်ပါပြီ။ 🔴"), parse_mode='html')
-    else:
-        num = int(input_val)
-        if num <= 0:
-            await event.reply(bq("⚠️ စာစောင်ရေတွက်က ၁ ထက်ကြီးရပါမယ် ဘရို။"))
-            return
-        GLOBAL_PREMODE_THRESHOLD = num
-        await premode_col.update_one({"_id": "global_config"}, {"$set": {"threshold": num}}, upsert=True)
-        await event.reply(bq(f"👑 Global Premium Mode ကို စာစောင် **[{num}]** စောင်ပြည့်စနစ်နဲ့ ဖွင့်လိုက်ပါပြီ။ 🟢"), parse_mode='html')
-        
-# 2️⃣ SPECIFIC_GROUP ထဲက ရှိပြီးသား Premium စာတွေကို တစ်ခါတည်း အကုန်ခြစ်သိမ်းမည့် Scraper (Owner Only)
-@bot1.on(events.NewMessage(pattern=r'^[/.]scrapepre'))
-async def scrape_premium_messages(event):
-    if event.sender_id != OWNER_ID: return
-    
-    await event.reply(bq("⏳ SPECIFIC_GROUP ထဲက Premium Emoji ပါတဲ့စာတွေကို စတင်ရှာဖွေပြီး Cloud Storage ထဲ သိမ်းဆည်းနေပါတယ်... (ခဏစောင့်ပေးပါ)"), parse_mode='html')
-    
-    collected_count = 0
-    # အစောင် ၂၀၀၀ အထိ နောက်ပြန်လှန်ရှာမယ် (မင်းစိတ်ကြိုက် limit တိုးလို့ရပါတယ်)
-    async for msg in bot1.iter_messages(SPECIFIC_GROUP, limit=2000):
-        if msg.text and msg.entities:
-            has_premium = False
-            for ent in msg.entities:
-                # Premium Emoji (Custom Emoji) ပါမပါ စစ်ဆေးခြင်း
-                if isinstance(ent, types.MessageEntityCustomEmoji):
-                    has_premium = True
-                    break
-            
-            if has_premium:
-                # DB ထဲမှာ ရှိပြီးသားစာ ဖြစ်နေရင် ထပ်မသိမ်းအောင် စစ်မယ်
-                exists = await premium_talk_col.find_one({"orig_msg_id": msg.id})
-                if not exists:
-                    try:
-                        # Storage Group ထဲကို လှမ်းသိမ်းမယ်
-                        forwarded = await bot1.forward_messages(STORAGE_CHANNEL, msg)
-                        # DB ထဲမှာ Storage Message ID ကို သိမ်းမယ်
-                        await premium_talk_col.insert_one({
-                            "orig_msg_id": msg.id,
-                            "storage_msg_id": forwarded.id
-                        })
-                        collected_count += 1
-                        await asyncio.sleep(0.6) # Telegram Flood အမိန့်မထိအောင် 0.3 စက္ကန့်စီ ခြားပြီးသိမ်းတာ
-                    except Exception:
-                        continue
-
-    await event.reply(bq(f"🎉 သိမ်းဆည်းခြင်း အောင်မြင်သည်! စုစုပေါင်း Premium Emoji မက်ဆေ့ခ်ျ {collected_count} စောင်ကို DB အသစ်ထဲသို့ ထည့်သွင်းပြီးပါပြီ။ ✅"), parse_mode='html')       
-# ====================================================================================
+      
+==============================================================================
 # 🆔 COMBINED IDENTITY MATRIX SYSTEM (User & Group ID Multi-Locator)
 # ====================================================================================
 @bot1.on(events.NewMessage(pattern=r'^[/.]id'))
@@ -898,7 +838,7 @@ async def protection_logic(event):
         text_lower = text.lower()  # စာလုံးအသေးအကြီး အကုန်မိစေရန် lower ပြောင်းခြင်း
         BIO_KEYWORDS = [
             "bio", "b i o", "biolink", "bio-link", "b-i-o", "tg bio", 
-            "ဘိုင်အို", "ဘိုင်-အို", "ဘိုင်-o", "ဘီအိုင်အို", "ဘိုင်အိုလင့်", "ဘိုင်အိုလင့်ခ်"
+            "ဘိုင်အို", "ဘိုင်-အို", "ဘိုင်-o", "ဘီအိုင်အို", "b.i.o", "ဘိုင်အိုလင့်", "ဘိုင်အိုလင့်ခ်"
         ]
 
         if any(key in text_lower for key in BIO_KEYWORDS) and not await check_admin(chat_id, sender_id):
@@ -912,8 +852,8 @@ async def protection_logic(event):
                 
                 # English Font အလှနှင့် လန်းဆန်းသော Layout ဒီဇိုင်း
                 warn_text = (
-                    f"⚠️ <b>𝘽𝙄𝙊 𝙎𝙔𝙎𝙏𝙀𝙈 𝘼𝙇𝙀𝙍𝙏</b>\n"
-                    f"Hey {mention}, discussing or sharing unauthorized <b>Biolink</b> content is restricted here.\n\n"
+                    f"⚠️ <b>❌𝘽𝙄𝙊 𝘼𝙇𝙀𝙍𝙏</b>\n"
+                    f"{mention}, ဟိုက်<b>Bio</b> မှာ ဘာဖစ်တာလဲ တိချင်ဝူး.\n\n"
                     f"⚡ <b>Status:</b> <blockquote expandable>Message Disintegrated 🗑️</blockquote>"
                 )
              
@@ -936,7 +876,7 @@ async def protection_logic(event):
             try:
                 await event.delete() 
                 mention = f"<a href='tg://user?id={sender_id}'>{escape_html(sender.first_name)}</a>"
-                await event.respond(bq(f"ဟိတ်.. {mention} link မပို့နဲ့ bro/sis မင်း link ကို ငါဖျက်လိုက်ပြီ"), parse_mode='html')
+                await event.respond(bq(f"ဟိတ်🐬 {mention} link မပို့နဲ့ bro/sis မင်း link ကို ဖျက်လိုက်ပြီ"), parse_mode='html')
             except: pass
 # ====================================================================================
 # 🎵 ADVANCED MULTIMEDIA PLAY & TRACKING SYSTEM (Per-User Multi-Session Matrix)
@@ -990,12 +930,12 @@ async def play_response(event):
         f"✨ <b>Requested By:</b> {mention}\n\n"
         f"💎 <b>Your Recent Playlist (Max 30):</b>\n"
         f"{playlist_text}"
-        f"💡 <i>ဒါက မင်း ဖွင့်တဲ့ song 30 ပုဒ်အထိ သိမ်းထားပေးပြီး /play xxxကို ထိတာနဲ့ copyဖြစ်ပြီး နောက်ကျ အဆင်သင့်နားထောင်နိုင်ရန် အတွက် မင်းသီချင်းတွေပြီးတဲ့အခါဒါကိုsaved message မှာ သိမ်းထားလိုက်</i>"
+        f"💡 <i>ဒါက မင်း ဖွင့်တဲ့ song 30 ပုဒ်အထိ သိမ်းထားပေးပြီး /play xxxကို ထိတာနဲ့ copyဖြစ်ပြီ🍬</i>"
     )
 
     # 🎛️ Inline Buttons Setup (User ID ကို Callback Data ထဲ ထည့်သွင်းထားသည်)
     inline_buttons = [
-        [Button.url("Join Our Community 🌐", "https://t.me/Comeback_BoD")],
+        [Button.url("ကျမတို့ဂလုကိုjoinပေးပါလား ဟိ🤍", "https://t.me/Comeback_BoD")],
         [Button.inline("songsစုထားမယ် နှိပ် 📥", data=f"save_pl_{user_id}")]
     ]
 
@@ -1049,17 +989,18 @@ async def close_playlist_callback(event):
     
     try:
         msg = await event.get_message()
-        current_text = msg.text if msg else ""
+        # ✨ ပြင်ဆင်ချက်: .text အစား .html ကိုသုံးပြီး Blockquote, Bold, Links တွေ အကုန်မပျက်အောင် သိမ်းဆည်းခြင်း
+        current_html = msg.html if msg else ""
         
         frozen_buttons = [
-            [Button.url("Join Our Community 🌐", "https://t.me/Comeback_BoD")],
+            [Button.url("Join Our Group", "https://t.me/Comeback_BoD")],
             [Button.inline("🔒 Playlist Locked & Ready to Save", data="playlist_frozen_done")]
         ]
         
-        if current_text:
+        if current_html:
             await event.edit(
-                text=current_text,
-                parse_mode='html',
+                text=current_html,      # HTML string ကို တိုက်ရိုက်ပြန်ထည့်သည်
+                parse_mode='html',      # Parse mode ကို html မဖြစ်မနေ ထားပေးရသည်
                 buttons=frozen_buttons
             )
         
@@ -1074,11 +1015,7 @@ async def close_playlist_callback(event):
     except Exception as e:
         print(f"Callback Error: {e}")
         await event.answer("Error closing session.", alert=False)
-
-@bot1.on(events.CallbackQuery(pattern=r'^playlist_frozen_done$'))
-async def playlist_frozen_done_callback(event):
-    await event.answer("ဒီ Playlist ကို ပိတ်ပြီးပါပြီ။ Saved Messages ထဲ Forward လုပ်ပြီး သိမ်းနိုင်ပါတယ်ဗျာ။", alert=False)
-
+        
 
 @bot1.on(events.NewMessage(pattern=r'^/b(?:@\w+)?$'))
 async def bot_bully(event):
@@ -1109,87 +1046,6 @@ async def stop_bot_bully(event):
     await event.respond(bq("နားလိုက်ပြီ။"))
 
 # 🎯 FILTER ပြန်ထုတ်ပေးသည့်စနစ် (Caption ပါ ဖတ်နိုင်အောင်နှင့် လူကို Reply ပြန်အောင် ပြင်ဆင်ပြီး)
-@bot1.on(events.NewMessage(incoming=True))
-async def trigger_custom_filters(event):
-    if event.is_private or not event.text or event.text.startswith(('/', '.', '@')): return
-    
-    user_text = event.text.lower().strip()
-    filter_doc = await custom_filters_col.find_one({"keyword": user_text})
-    
-    if filter_doc and filter_doc.get("type") == "storage_msg":
-        msg_id = filter_doc.get("msg_id")
-        try:
-            # Storage ထဲက မူရင်းစာကို လှမ်းယူမယ်
-            stored_msg = await bot1.get_messages(STORAGE_CHANNEL, ids=msg_id)
-            if stored_msg:
-                if stored_msg.media:
-                    # 🚀 ဖိုင်ရော၊ သူ့ထဲမှာပါတဲ့ စာသား (Caption) ရော၊ Entities ရော အကုန်တွဲပို့မယ်
-                    # reply_to=event.id ထည့်ထားလို့ 'hii' လို့ ရိုက်တဲ့လူကို Bot က အလိုအလျောက် Reply ပြန်ပေးသွားမှာပါ
-                    await bot1.send_message(
-                        event.chat_id, 
-                        message=stored_msg.text, 
-                        file=stored_msg.media, 
-                        entities=stored_msg.entities,
-                        reply_to=event.id
-                    )
-                else:
-                    # သာမန်စာသား သက်သက်ဆိုရင်တော့ ရိုးရိုးပဲ လူကို Reply ပြန်ပြီး ပို့ပေးလိုက်မယ်
-                    await bot1.send_message(
-                        event.chat_id, 
-                        stored_msg.text, 
-                        entities=stored_msg.entities,
-                        reply_to=event.id
-                    )
-        except Exception as e:
-            print(f"Filter Send Error: {e}")
-            
-# 🔄 လူတွေရဲ့စာကို ရေတွက်ပြီး Auto Reply / Send လုပ်မည့်စနစ် (Forward Header မပါအောင် ပြင်ဆင်ပြီး)
-@bot1.on(events.NewMessage(incoming=True))
-async def premium_mode_counter_handler(event):
-    global GLOBAL_PREMODE_THRESHOLD, chat_counters
-    
-    if event.is_private or not event.sender: return
-    if getattr(event.sender, 'bot', False): return
-    if event.text and event.text.startswith(('/', '.', '@')): return
-    
-    if GLOBAL_PREMODE_THRESHOLD is None:
-        config = await premode_col.find_one({"_id": "global_config"})
-        GLOBAL_PREMODE_THRESHOLD = config.get("threshold", 0) if config else 0
-        
-    if GLOBAL_PREMODE_THRESHOLD == 0: return
-    
-    chat_id = event.chat_id
-    
-    if chat_id not in chat_counters:
-        chat_counters[chat_id] = 0
-    chat_counters[chat_id] += 1
-    
-    if chat_counters[chat_id] >= GLOBAL_PREMODE_THRESHOLD:
-        chat_counters[chat_id] = 0  # Counter ကို 0 ပြန်ချမယ်
-        
-        # DB ထဲကနေ Premium စာတစ်စောင် Random နှိုက်မယ်
-        pipeline = [{"$sample": {"size": 1}}]
-        cursor = premium_talk_col.aggregate(pipeline)
-        premium_docs = await cursor.to_list(length=1)
-        
-        if premium_docs:
-            storage_msg_id = premium_docs[0]["storage_msg_id"]
-            try:
-                stored_msg = await bot1.get_messages(STORAGE_CHANNEL, ids=storage_msg_id)
-                if stored_msg and stored_msg.media:
-                    
-                    # 🎲 ၅၀/၅၀ ချမယ် - လူကို Reply ပြန်မလား၊ အလွတ်ကြီးပဲ ပို့မလား
-                    action = random.choice(["reply", "send"])
-                    
-                    if action == "reply":
-                        # Forward နာမည်မပါဘဲ နောက်ဆုံးလူကို Reply ပြန်တဲ့ပုံစံ ပို့မယ်
-                        await bot1.send_message(chat_id, file=stored_msg.media, reply_to=event.id)
-                    else:
-                        # Forward နာမည်မပါဘဲ Group ထဲကို သူ့ဘာသာသူ standalone ကောက်ပို့မယ်
-                        await bot1.send_message(chat_id, file=stored_msg.media)
-                        
-            except Exception as e:
-                print(f"Premium Send Error: {e}")
                 
 @bot1.on(events.NewMessage(pattern=r'^/shadow(?:@\w+)?$'))
 async def set_shadow_ban(event):
@@ -1231,7 +1087,7 @@ async def turn_on_talking(event):
     
     on_text = (
         f"🌌 <b>𝙑𝙊𝘾𝘼𝙇 𝙋𝙍𝙊𝙏𝙊𝘾𝙊𝙇: 𝘼𝘾𝙏𝙄𝙑𝘼𝙏𝙀𝘿</b>\n"
-        f"🔊 Smart Reply Engine ကို Sector အားလုံးမှာ <b>စကားဝင်ပြောဖို့</b> အသက်သွင်းလိုက်ပါပြီ Chief!"
+        f"🔊 Smart Reply Engine ကို Sector အားလုံးမှာ <b>စကားဝင်ပြောဖို့</b> အသက်သွင်းပြီး"
     )
     await event.reply(bq(on_text), parse_mode='html')
 
@@ -1332,7 +1188,7 @@ async def dark_passenger_watcher(event):
                 insult_msg = await event.respond(bq(random.choice(insults)), parse_mode='html')
                 
                 # 4. 2 စက္ကန့် စောင့်ပြီး Bot စာကိုပါ ထပ်မံဖျက်ချခြင်း
-                await asyncio.sleep(2.0)
+                await asyncio.sleep(4.0)
                 await insult_msg.delete()
                 
             except Exception as e:
@@ -1407,7 +1263,7 @@ async def channel_forward_filter_handler(event):
                 # English + Burmese Mix ပုံစံတိုတိုနှင့် လန်းလန်းလေး ပြောင်းလဲထားသည်
                 warn_msg = (
                     f"🚫 <b>CHANNEL FORWARD NOT ALLOWED!</b>\n\n"
-                    f"Hey {mention}Channel ကနေ Forward လာတဲ့ Post တွေ ပို့ခွင့်မရှိပါဘူး! <b>[Erased]</b>"
+                    f"Hey {mention}Channel ကနေ Forward လာတဲ့ Post တွေ ပို့ခွင့်မရှိပါဘူးရှင့်🌬️<b>[Erased]</b>"
                 )
                 
                 # Reply စာသားကို Group ထဲတွင် ကျန်ခဲ့စေရန် ဒီတိုင်း respond လုပ်ထားသည် (မဖျက်ပါ)
