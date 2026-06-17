@@ -87,11 +87,6 @@ characters_col = db["game_characters"]
 user_game_profiles_col = db["user_game_profiles"]
 group_spawn_state_col = db["group_spawn_state"]
 
-# Indexing to maintain ultra high-speed lookups
-users_col.create_index("user_id", unique=True)
-user_game_profiles_col.create_index("user_id", unique=True)
-characters_col.create_index("name", unique=True)
-
 # ==========================================
 # 🤖 CLIENT SETUP (SINGLE BOT)
 # ==========================================
@@ -2247,11 +2242,22 @@ async def global_talk_counter_handler(event):
         asyncio.create_task(processed_background_reply(event, event.text.strip(), as_reply=False))
 
 # ==========================================
-# 🚀 SYSTEM INITIALIZATION GATEWAY
+# 🚀 SYSTEM INITIALIZATION GATEWAY (အမှန်ကန်ဆုံး ပေါင်းစပ်ပြီးသားဗားရှင်း)
 # ==========================================
 async def start_system():
     threading.Thread(target=run_flask, daemon=True).start()
     print("Starting Main Bot Engine (Sovereign System Plus Architecture)...")
+    
+    # 🗄️ Active Loop ထဲရောက်မှ Index တွေကို စနစ်တကျ Auto Sync လုပ်ပေးခြင်း (ဒါကြောင့် Render error မတက်တော့ပါ)
+    try:
+        await users_col.create_index("user_id", unique=True)
+        await user_game_profiles_col.create_index("user_id", unique=True)
+        await characters_col.create_index("name", unique=True)
+        print("Database Indexes synchronized successfully! ✔️")
+    except Exception as e:
+        print(f"Index creation error: {e}")
+
+    # Bot Engine ကို စတင်ပတ်ခြင်း
     await bot1.start(bot_token=MAIN_BOT_TOKEN)
     me_main = await bot1.get_me()
     bot_ids.append(me_main.id)
@@ -2262,8 +2268,11 @@ async def start_system():
     asyncio.create_task(smart_auto_unmute_worker())
     asyncio.create_task(weather_daily_cron_loop())
     
+    # Bot ကို အမြဲတမ်း Live ဖြစ်နေအောင် ထိန်းထားပေးမည့်အဆင့်
     await bot1.run_until_disconnected()
 
 if __name__ == '__main__':
-    try: asyncio.run(start_system())
-    except (KeyboardInterrupt, SystemExit): print("Sovereign Core Shutting Down Safely.")
+    try: 
+        asyncio.run(start_system())
+    except (KeyboardInterrupt, SystemExit): 
+        print("Sovereign Core Shutting Down Safely.")
