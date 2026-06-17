@@ -143,6 +143,28 @@ async def is_on_cooldown(user_id, command_name, cooldown_seconds=3):
             return True, int(cooldown_seconds - elapsed)
     user_cooldowns[cache_key] = now
     return False, 0
+# 🚀 ADVANCED SYSTEM LOGIC: REAL-TIME USER METRICS TRACKER
+def track_user_metrics(user_id, username, first_name):
+    async def _track_bg():
+        try:
+            await users_col.update_one(
+                {"user_id": user_id},
+                {
+                    "$set": {
+                        "username": username,
+                        "first_name": first_name,
+                        "last_active": datetime.now(TZ)
+                    }
+                },
+                upsert=True
+            )
+        except Exception as e:
+            print(f"Error in track_user_metrics: {e}")
+            
+    try:
+        asyncio.create_task(_track_bg())
+    except Exception:
+        pass
 
 # 🚀 ADVANCED SYSTEM LOGIC 3: CENTRALIZED ERROR NOTIFICATION TO OWNER DM
 async def report_system_error(location, error_msg):
@@ -195,7 +217,7 @@ def generate_weather_text(region_id):
         f"☁️ <b>မိုးလေဝသ အခြေအနေ:</b> <code>{data['condition']}</code>\n"
         f"💧 <b>လေထုစိုထိုင်းဆ:</b> <code>{data['humidity']}</code>\n"
         f"💨 <b>လေတိုက်နှုန်း:</b> <code>{data['wind']}</code>\n"
-        f"⏰ <b>နောက်ဆုံး Update:</b> <code>ယနေ့ မနက် ၀၆:၀၀ နာရီ</code>"
+        f"⏰ <b>နောက်ဆုံး Update:</b> <code>ယနေ့ ည ၀၈:၀၀ နာရီ</code>"
     )
 
 async def weather_daily_cron_loop():
@@ -343,7 +365,7 @@ async def system_start_router(event):
         f"🌌 <b>𝑩𝑶𝑫 𝑺𝒚𝒔𝒕𝒆𝒎 𝑷𝒍𝒖𝒔 𝑬𝒏𝒈𝒊𝒏𝒆</b>\n"
         f"ကျွန်ုပ်သည် Telegram Groups များကို အလိုအလျောက် အဆင့်မြင့်ဆုံး ထိန်းချုပ်ပေးနိုင်သော စနစ်ဖြစ်ပြီး "
         f"ပျော်ရွှင်စရာ Charater Card Spawning နှင့် /Game နှင့် စကားပြော စာထောက် စနစ်များပါ ပါဝင်ဖွဲ့စည်းထားသော Production-level Bot ဖြစ်ပါသည်။\n\n"
-        f"💡 အောက်ပါ Inline Buttons များကို အသုံးပြု၍ လုပ်ငန်းဆောင်တာများနှင့် ကစားနည်းလမ်းညွှန်များကို အလွယ်တကူ လေ့လာနိုင်ပါသည် Chief။"
+        f"🦖 အောက်ပါ Inline Buttons များကို အသုံးပြု၍ လုပ်ငန်းဆောင်တာများနှင့် ကစားနည်းလမ်းညွှန်များကို အလွယ်တကူ လေ့လာနိုင်ပါသည် Chief။"
     )
     buttons = [
         [Button.inline("⚙️ Operational Commands", data="nav_help_main"), Button.inline("🎮 Catching Game Rules", data="nav_game_main")],
@@ -927,9 +949,9 @@ async def tag_admins(event):
         
         compact_admin_list = "  •  ".join(admin_mentions)
         adm_signal_text = (
-            f"📢 <b>Broadcast:</b> <code>{escape_html(text)}</code>\n\n"
+            f"</b> <code>{escape_html(text)}</code>\n\n"
             f"🌌 <b>အက်ဒမင်များ ခဏလာကြတဲ့</b>\n"
-            f"🛡️ <b>🦦:</b>\n"
+            f"🦦:</b>\n"
             f"{compact_admin_list}"
         )
         await event.respond(bq(adm_signal_text), parse_mode='html')
