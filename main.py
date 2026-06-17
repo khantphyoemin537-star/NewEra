@@ -78,6 +78,10 @@ morgan_col = db["morgan_talk"]
 rank_col = db["rank_col"]
 system_col = db["system_col"]
 reply_save_col = db["reply_save_col"]
+users_col = db["users"]
+user_game_profiles_col = db["user_game_profiles"]
+characters_col = db["characters"]
+muted_registry_col = db["muted_registry"]
 
 # ==========================================
 # 🤖 CLIENT SETUP (SINGLE BOT)
@@ -152,7 +156,14 @@ async def report_system_error(location, error_msg):
         )
         await bot1.send_message(OWNER_ID, bq(alert_text), parse_mode='html')
     except Exception: pass
-
+# 🚀 Mute သက်တမ်း မှတ်သားရန် Function အသစ်
+async def register_temporary_mute(chat_id, user_id, duration_minutes=60):
+    expiry_time = datetime.now(TZ) + timedelta(minutes=duration_minutes)
+    await muted_registry_col.update_one(
+        {"chat_id": chat_id, "user_id": user_id},
+        {"$set": {"expiry": expiry_time}},
+        upsert=True
+    )
 
 # ==========================================
 # 🌤️ MYANMAR WEATHER DASHBOARD DATA ENGINE
@@ -414,7 +425,7 @@ async def system_callback_router(event):
         return await event.edit(bq(game_text), parse_mode='html', buttons=[[Button.inline("🔙 Back Menu", data="nav_back_home")]])
 
 # COMMANDS INTERCEPTORS
-@bot1.on(events.NewMessage(pattern=r'^/helpp$'))
+@bot1.on(events.NewMessage(pattern=r'^/help$'))
 async def direct_help_handler(event):
     is_cd, rem = await is_on_cooldown(event.sender_id, "helpp", 2)
     if is_cd: return
@@ -767,14 +778,15 @@ async def get_identity_matrix_handler(event):
 # ====================================================================================
 async def get_target_user(event, args):
     reply = await event.get_reply_message()
-    if reply: return reply.sender
+    if reply: 
+        return await reply.get_sender() # 👈 ပြင်ဆင်ချက်: .sender အစား await reply.get_sender() ကိုသုံးရပါမယ်
     if args:
         try:
             target = args.strip()
             return await bot1.get_entity(int(target) if target.lstrip('-').isdigit() else target)
         except Exception: return None
     return None
-
+    
 @bot1.on(events.NewMessage(pattern=r'^/mute(?:@\w+)?(?:\s+(.*))?'))
 async def mute_user(event):
     if not await check_ban_rights(event.chat_id, event.sender_id): return
