@@ -1378,7 +1378,6 @@ async def start_system():
     print(f"Sovereign Engine synchronized as @{me_main.username}")
     
     # Background Worker Coroutines
-    asyncio.create_task(periodic_buffer_flusher())
     asyncio.create_task(weather_daily_cron_loop())
     
     # Bot ကို အမြဲတမ်း Live ဖြစ်နေအောင် ထိန်းထားပေးမည့်အဆင့်
