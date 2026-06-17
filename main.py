@@ -191,31 +191,7 @@ async def report_system_error(location, error_msg):
         await bot1.send_message(OWNER_ID, bq(alert_text), parse_mode='html')
     except Exception: pass
 
-# 🚀 ADVANCED SYSTEM LOGIC 4: SMART AUTO-MUTE EXPIRY REGISTRY CHECKER
-async def register_temporary_mute(chat_id, user_id, duration_minutes=5):
-    unmute_time = datetime.now(TZ) + timedelta(minutes=duration_minutes)
-    await muted_registry_col.update_one(
-        {"chat_id": chat_id, "user_id": user_id},
-        {"$set": {"unmute_time": unmute_time}},
-        upsert=True
-    )
 
-async def smart_auto_unmute_worker():
-    while True:
-        try:
-            now = datetime.now(TZ)
-            cursor = muted_registry_col.find({"unmute_time": {"$lte": now}})
-            async for doc in cursor:
-                chat_id = doc["chat_id"]
-                user_id = doc["user_id"]
-                try:
-                    await bot1.edit_permissions(chat_id, user_id, send_messages=True)
-                    await bot1.send_message(chat_id, bq(f"🔊 <b>Auto-Unmute System:</b> User ID <code>{user_id}</code> သတ်မှတ်ချိန်ပြည့်မြောက်သဖြင့် အလိုအလျောက် စကားပြောခွင့် ပြန်လည်ရရှိပါပြီ။"), parse_mode='html')
-                except Exception: pass
-                await muted_registry_col.delete_one({"_id": doc["_id"]})
-        except Exception as e:
-            await report_system_error("Auto Unmute Worker Loop", e)
-        await asyncio.sleep(10)
 # ==========================================
 # 🌤️ MYANMAR WEATHER DASHBOARD DATA ENGINE
 # ==========================================
