@@ -118,6 +118,23 @@ def plain_emoji(text: str) -> str:
 
 def strip_tags(text: str) -> str:
     return html.unescape(re.sub(r"<[^>]+>", "", plain_emoji(text)))
+# ============================================================
+# 🌍 WEB SERVER (For Render/Heroku)
+# ============================================================
+async def _health(reader, writer):
+    await reader.read(100)
+    writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 2\r\n\r\nOK")
+    await writer.drain()
+    writer.close()
+
+async def start_health_server():
+    port = int(os.environ.get("PORT", 10000))
+    try:
+        srv = await asyncio.start_server(_health, "0.0.0.0", port)
+        async with srv:
+            await srv.serve_forever()
+    except Exception:
+        pass
 
 # ============================================================
 # 🌐 BOT API CLIENT  (+ premium-icon buttons with automatic fallback)
@@ -971,6 +988,8 @@ async def creation_handler(event):
 async def main():
     global BOT_USERNAME
     validate_env()
+    asyncio.create_task(start_health_server())
+ 
     await bot.start(bot_token=BOT_TOKEN)
     me = await bot.get_me()
     BOT_USERNAME = BOT_USERNAME or me.username
