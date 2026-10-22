@@ -1,11 +1,3 @@
-python-telegram-bot
-telethon
-pymongo
-flask
-Pillow
-gunicorn
-dnspython
-pytz
-groq
-openai
-motor 
+telethon>=1.36.0
+motor>=3.6.0
+python-dotenv>=1.0.1
